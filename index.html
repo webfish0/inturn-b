@@ -96,8 +96,8 @@
       grid-template-rows: var(--top-row-height) 8px minmax(180px, 1fr);
       grid-template-areas:
         "tools split-left preview split-right props"
-        "split-horizontal split-horizontal split-horizontal split-right props"
-        "text text text split-right props";
+        "tools split-left split-horizontal split-right props"
+        "tools split-left text split-right props";
       gap: 10px;
       padding: 10px;
       height: calc(100vh - 56px);
@@ -118,6 +118,8 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      overflow-y: auto;
+      padding-right: 8px;
     }
 
     .preview {
@@ -262,6 +264,54 @@
     .item-row.active {
       background: var(--accent-soft);
       border-color: #7dd3fc;
+    }
+
+    .git-panel {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+      background: #fbfdff;
+    }
+
+    .git-panel label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .git-panel input,
+    .git-panel select {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 8px;
+      background: #ffffff;
+      color: var(--ink);
+      min-width: 0;
+    }
+
+    .git-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .git-actions button {
+      width: 100%;
+      padding: 7px 6px;
+    }
+
+    .git-status {
+      min-height: 18px;
+      font-size: 12px;
+      color: #075985;
+    }
+
+    .git-status.error {
+      color: #9f1239;
     }
 
     .props form {
@@ -474,6 +524,62 @@
         <button class="tool-btn" data-add-fragment="par">Par</button>
       </div>
 
+      <h3>Git Sync</h3>
+      <div class="git-panel">
+        <label>
+          Provider
+          <select id="git-provider">
+            <option value="github">GitHub</option>
+            <option value="gitlab">GitLab</option>
+            <option value="gitea">Git (Gitea/Forgejo)</option>
+          </select>
+        </label>
+        <label>
+          API Base URL
+          <input id="git-api-base" type="text" placeholder="https://api.github.com">
+        </label>
+        <label>
+          Repo / Project
+          <input id="git-project" type="text" placeholder="owner/repo">
+        </label>
+        <label>
+          Branch
+          <input id="git-branch" type="text" placeholder="main">
+        </label>
+        <label>
+          Directory (optional)
+          <input id="git-directory" type="text" placeholder="diagrams">
+        </label>
+        <label>
+          File in repo
+          <select id="git-file-select">
+            <option value="">Custom path (below)</option>
+          </select>
+        </label>
+        <label>
+          File path to load/save
+          <input id="git-file-path" type="text" placeholder="diagrams/sequence.puml">
+        </label>
+        <label>
+          Format
+          <select id="git-content-type">
+            <option value="plantuml">PlantUML (.puml)</option>
+            <option value="json">Diagram JSON (.json)</option>
+          </select>
+        </label>
+        <label>
+          Access token
+          <input id="git-token" type="password" placeholder="Personal Access Token">
+        </label>
+        <div class="hint">Token stays in this browser session and is not saved to local storage.</div>
+        <div class="git-actions">
+          <button id="btn-git-list" type="button" class="tool-btn">List</button>
+          <button id="btn-git-load" type="button" class="tool-btn">Load</button>
+          <button id="btn-git-save" type="button" class="tool-btn">Save</button>
+        </div>
+        <div id="git-status" class="git-status">Not connected.</div>
+      </div>
+
       <h3>Diagram Items</h3>
       <div class="items" id="items-list"></div>
     </section>
@@ -573,6 +679,7 @@
     const PARTICIPANT_TYPES = ["actor", "boundary", "control", "entity", "database"];
     const MESSAGE_TYPES = ["sync", "async", "return", "create", "destroy"];
     const FRAGMENT_TYPES = ["loop", "alt", "opt", "par"];
+    const GIT_CONFIG_KEY = "sequence-diagram-editor-git-config-v1";
 
     const state = {
       participants: [],
@@ -583,7 +690,16 @@
       drag: null,
       layoutDrag: null,
       previewScale: 1,
-      contextMenu: { open: false, targetKind: null, targetId: null }
+      contextMenu: { open: false, targetKind: null, targetId: null },
+      git: {
+        provider: "github",
+        apiBase: "https://api.github.com",
+        project: "",
+        branch: "main",
+        directory: "",
+        filePath: "sequence.puml",
+        contentType: "plantuml"
+      }
     };
 
     const layout = {
@@ -636,12 +752,28 @@
     const ctxArrowDotted = document.getElementById("ctx-arrow-dotted");
     const ctxDeleteItem = document.getElementById("ctx-delete-item");
 
+    const gitProvider = document.getElementById("git-provider");
+    const gitApiBase = document.getElementById("git-api-base");
+    const gitProject = document.getElementById("git-project");
+    const gitBranch = document.getElementById("git-branch");
+    const gitDirectory = document.getElementById("git-directory");
+    const gitFileSelect = document.getElementById("git-file-select");
+    const gitFilePath = document.getElementById("git-file-path");
+    const gitContentType = document.getElementById("git-content-type");
+    const gitToken = document.getElementById("git-token");
+    const btnGitList = document.getElementById("btn-git-list");
+    const btnGitLoad = document.getElementById("btn-git-load");
+    const btnGitSave = document.getElementById("btn-git-save");
+    const gitStatus = document.getElementById("git-status");
+
     function init() {
       resetDiagram();
       bindToolbar();
       bindToolButtons();
       bindProps();
       bindTextControls();
+      bindGitControls();
+      loadGitConfig();
       bindContextMenu();
       bindLayoutControls();
       bindGlobalDrag();
@@ -788,6 +920,576 @@
       });
       textArea.addEventListener("click", selectFromTextCaret);
       textArea.addEventListener("keyup", selectFromTextCaret);
+    }
+
+    function bindGitControls() {
+      gitProvider.addEventListener("change", () => {
+        const previous = state.git.provider;
+        readGitInputsToState();
+        if (state.git.provider !== previous) {
+          const previousDefault = defaultGitApiBase(previous);
+          if (!state.git.apiBase || state.git.apiBase === previousDefault) {
+            state.git.apiBase = defaultGitApiBase(state.git.provider);
+          }
+        }
+        syncGitInputsFromState();
+        saveGitConfig();
+      });
+
+      [gitApiBase, gitProject, gitBranch, gitDirectory, gitFilePath, gitContentType].forEach((node) => {
+        node.addEventListener("input", () => {
+          readGitInputsToState();
+          saveGitConfig();
+        });
+        node.addEventListener("change", () => {
+          readGitInputsToState();
+          saveGitConfig();
+        });
+      });
+
+      gitFileSelect.addEventListener("change", () => {
+        if (!gitFileSelect.value) return;
+        gitFilePath.value = gitFileSelect.value;
+        gitContentType.value = inferContentTypeFromPath(gitFileSelect.value);
+        readGitInputsToState();
+        saveGitConfig();
+      });
+
+      btnGitList.addEventListener("click", async () => {
+        try {
+          setGitBusy(true);
+          readGitInputsToState();
+          if (!state.git.project) throw new Error("Provide a repo/project first.");
+          setGitStatus("Listing files...");
+          const files = await listGitFiles(state.git, gitToken.value.trim());
+          updateGitFileOptions(files);
+          setGitStatus("Found " + files.length + " file(s).");
+          saveGitConfig();
+        } catch (error) {
+          setGitStatus(error.message || "Failed to list files.", true);
+        } finally {
+          setGitBusy(false);
+        }
+      });
+
+      btnGitLoad.addEventListener("click", async () => {
+        try {
+          setGitBusy(true);
+          readGitInputsToState();
+          if (!state.git.project) throw new Error("Provide a repo/project first.");
+          const filePath = resolveGitFilePath();
+          if (!filePath) throw new Error("Provide a file path to load.");
+          setGitStatus("Loading " + filePath + "...");
+          const content = await readGitFile(state.git, gitToken.value.trim(), filePath);
+          applyLoadedContent(filePath, content);
+          setGitStatus("Loaded " + filePath + ".");
+          saveGitConfig();
+        } catch (error) {
+          setGitStatus(error.message || "Failed to load file.", true);
+        } finally {
+          setGitBusy(false);
+        }
+      });
+
+      btnGitSave.addEventListener("click", async () => {
+        try {
+          setGitBusy(true);
+          readGitInputsToState();
+          if (!state.git.project) throw new Error("Provide a repo/project first.");
+          const filePath = resolveGitFilePath();
+          if (!filePath) throw new Error("Provide a file path to save.");
+          const content = buildGitSaveContent(state.git.contentType, filePath);
+          setGitStatus("Saving " + filePath + "...");
+          await writeGitFile(state.git, gitToken.value.trim(), filePath, content);
+          setGitStatus("Saved " + filePath + ".");
+          saveGitConfig();
+        } catch (error) {
+          setGitStatus(error.message || "Failed to save file.", true);
+        } finally {
+          setGitBusy(false);
+        }
+      });
+    }
+
+    function loadGitConfig() {
+      try {
+        const raw = localStorage.getItem(GIT_CONFIG_KEY);
+        if (!raw) {
+          syncGitInputsFromState();
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          syncGitInputsFromState();
+          return;
+        }
+        state.git.provider = parsed.provider || state.git.provider;
+        state.git.apiBase = parsed.apiBase || defaultGitApiBase(state.git.provider);
+        state.git.project = parsed.project || "";
+        state.git.branch = parsed.branch || "main";
+        state.git.directory = parsed.directory || "";
+        state.git.filePath = parsed.filePath || "sequence.puml";
+        state.git.contentType = parsed.contentType || inferContentTypeFromPath(state.git.filePath);
+      } catch (_error) {
+        // ignore malformed local data
+      }
+      syncGitInputsFromState();
+    }
+
+    function saveGitConfig() {
+      const safe = {
+        provider: state.git.provider,
+        apiBase: state.git.apiBase,
+        project: state.git.project,
+        branch: state.git.branch,
+        directory: state.git.directory,
+        filePath: state.git.filePath,
+        contentType: state.git.contentType
+      };
+      try {
+        localStorage.setItem(GIT_CONFIG_KEY, JSON.stringify(safe));
+      } catch (_error) {
+        // ignore local storage failures
+      }
+    }
+
+    function readGitInputsToState() {
+      state.git.provider = gitProvider.value || "github";
+      state.git.apiBase = (gitApiBase.value || defaultGitApiBase(state.git.provider)).trim();
+      state.git.project = (gitProject.value || "").trim();
+      state.git.branch = (gitBranch.value || "main").trim() || "main";
+      state.git.directory = normalizeRepoPath(gitDirectory.value || "");
+      state.git.filePath = normalizeRepoPath(gitFilePath.value || "");
+      state.git.contentType = gitContentType.value || inferContentTypeFromPath(state.git.filePath);
+    }
+
+    function syncGitInputsFromState() {
+      gitProvider.value = state.git.provider;
+      gitApiBase.value = state.git.apiBase;
+      gitProject.value = state.git.project;
+      gitBranch.value = state.git.branch;
+      gitDirectory.value = state.git.directory;
+      gitFilePath.value = state.git.filePath;
+      gitContentType.value = state.git.contentType;
+      if (state.git.provider === "gitlab") {
+        gitProject.placeholder = "group/project or numeric id";
+      } else {
+        gitProject.placeholder = "owner/repo";
+      }
+      gitApiBase.placeholder = defaultGitApiBase(state.git.provider);
+    }
+
+    function setGitBusy(isBusy) {
+      [btnGitList, btnGitLoad, btnGitSave].forEach((button) => {
+        button.disabled = isBusy;
+      });
+    }
+
+    function setGitStatus(message, isError) {
+      gitStatus.textContent = message;
+      gitStatus.classList.toggle("error", Boolean(isError));
+    }
+
+    function updateGitFileOptions(files) {
+      const currentPath = resolveGitFilePath();
+      gitFileSelect.innerHTML = "";
+      const custom = document.createElement("option");
+      custom.value = "";
+      custom.textContent = "Custom path (below)";
+      gitFileSelect.appendChild(custom);
+
+      files.forEach((path) => {
+        const option = document.createElement("option");
+        option.value = path;
+        option.textContent = path;
+        gitFileSelect.appendChild(option);
+      });
+
+      const selected = files.includes(currentPath) ? currentPath : "";
+      gitFileSelect.value = selected;
+    }
+
+    function resolveGitFilePath() {
+      const selected = normalizeRepoPath(gitFileSelect.value || "");
+      const typed = normalizeRepoPath(gitFilePath.value || "");
+      if (selected) return selected;
+      if (typed) {
+        if (state.git.directory && !typed.includes("/")) return joinRepoPath(state.git.directory, typed);
+        return typed;
+      }
+
+      const extension = state.git.contentType === "json" ? ".json" : ".puml";
+      const fallback = "sequence" + extension;
+      return state.git.directory ? joinRepoPath(state.git.directory, fallback) : fallback;
+    }
+
+    function applyLoadedContent(path, content) {
+      const mode = inferContentTypeFromPath(path);
+      gitContentType.value = mode;
+      state.git.contentType = mode;
+      gitFilePath.value = path;
+      state.git.filePath = path;
+
+      if (mode === "json") {
+        const parsed = JSON.parse(content);
+        applyModelSnapshot(parsed);
+      } else {
+        textArea.value = content;
+        const parsed = parsePlantUml(content);
+        state.participants = parsed.participants;
+        state.messages = parsed.messages;
+        state.notes = parsed.notes;
+        state.fragments = parsed.fragments;
+        state.selection = null;
+      }
+      render();
+    }
+
+    function buildGitSaveContent(contentType, filePath) {
+      const mode = contentType || inferContentTypeFromPath(filePath);
+      if (mode === "json") {
+        return JSON.stringify(exportModelSnapshot(), null, 2);
+      }
+      return textArea.value || serializePlantUml();
+    }
+
+    function exportModelSnapshot() {
+      return {
+        participants: state.participants.map((item) => ({ ...item })),
+        messages: state.messages.map((item) => ({ ...item })),
+        notes: state.notes.map((item) => ({ ...item })),
+        fragments: state.fragments.map((item) => ({ ...item }))
+      };
+    }
+
+    function applyModelSnapshot(model) {
+      if (!model || typeof model !== "object") throw new Error("Invalid diagram JSON.");
+      if (!Array.isArray(model.participants) || !Array.isArray(model.messages) || !Array.isArray(model.notes) || !Array.isArray(model.fragments)) {
+        throw new Error("Diagram JSON is missing participants/messages/notes/fragments.");
+      }
+
+      state.participants = model.participants.map((item, index) => ({
+        id: String(item.id || ("p" + (index + 1))),
+        name: String(item.name || "Participant"),
+        type: PARTICIPANT_TYPES.includes(item.type) ? item.type : "entity"
+      }));
+      state.messages = model.messages.map((item, index) => ({
+        id: String(item.id || ("m" + (index + 1))),
+        fromId: String(item.fromId || state.participants[0]?.id || ""),
+        toId: String(item.toId || state.participants[0]?.id || ""),
+        label: String(item.label || ""),
+        type: MESSAGE_TYPES.includes(item.type) ? item.type : "sync",
+        color: normalizeColor(item.color || "#0f172a"),
+        dotted: Boolean(item.dotted)
+      }));
+      state.notes = model.notes.map((item, index) => ({
+        id: String(item.id || ("n" + (index + 1))),
+        targetId: String(item.targetId || state.participants[0]?.id || ""),
+        text: String(item.text || ""),
+        position: ["left", "right", "over"].includes(item.position) ? item.position : "right",
+        offsetY: clamp(Number(item.offsetY) || 0, -220, 2200)
+      }));
+      state.fragments = model.fragments.map((item, index) => ({
+        id: String(item.id || ("f" + (index + 1))),
+        kind: FRAGMENT_TYPES.includes(item.kind) ? item.kind : "loop",
+        label: String(item.label || "condition"),
+        startIndex: clamp(Number(item.startIndex) || 0, 0, Math.max(0, state.messages.length - 1)),
+        endIndex: clamp(Number(item.endIndex) || 0, 0, Math.max(0, state.messages.length - 1))
+      })).map((fragment) => ({
+        ...fragment,
+        endIndex: Math.max(fragment.startIndex, fragment.endIndex)
+      }));
+
+      state.selection = null;
+    }
+
+    async function listGitFiles(config, token) {
+      if (config.provider === "gitlab") return listGitLabFiles(config, token);
+      if (config.provider === "gitea") return listGiteaFiles(config, token);
+      return listGitHubFiles(config, token);
+    }
+
+    async function readGitFile(config, token, path) {
+      if (config.provider === "gitlab") return readGitLabFile(config, token, path);
+      if (config.provider === "gitea") return readGiteaFile(config, token, path);
+      return readGitHubFile(config, token, path);
+    }
+
+    async function writeGitFile(config, token, path, content) {
+      if (config.provider === "gitlab") return writeGitLabFile(config, token, path, content);
+      if (config.provider === "gitea") return writeGiteaFile(config, token, path, content);
+      return writeGitHubFile(config, token, path, content);
+    }
+
+    async function listGitHubFiles(config, token) {
+      const directory = normalizeRepoPath(config.directory);
+      const pathPart = directory ? "/" + encodeRepoPath(directory) : "";
+      const url = trimSlash(config.apiBase) + "/repos/" + normalizeRepoPath(config.project) + "/contents" + pathPart + "?ref=" + encodeURIComponent(config.branch);
+      const response = await requestGitJson(url, {
+        provider: "github",
+        token
+      });
+      const entries = Array.isArray(response) ? response : [response];
+      return entries
+        .filter((item) => item && item.type === "file")
+        .map((item) => item.path)
+        .filter((path) => supportsSequenceFile(path))
+        .sort();
+    }
+
+    async function readGitHubFile(config, token, path) {
+      const url = trimSlash(config.apiBase) + "/repos/" + normalizeRepoPath(config.project) + "/contents/" + encodeRepoPath(path) + "?ref=" + encodeURIComponent(config.branch);
+      const response = await requestGitJson(url, {
+        provider: "github",
+        token
+      });
+      return decodeBase64Utf8((response.content || "").replace(/\n/g, ""));
+    }
+
+    async function writeGitHubFile(config, token, path, content) {
+      const baseUrl = trimSlash(config.apiBase) + "/repos/" + normalizeRepoPath(config.project) + "/contents/" + encodeRepoPath(path);
+      let sha = "";
+      try {
+        const existing = await requestGitJson(baseUrl + "?ref=" + encodeURIComponent(config.branch), {
+          provider: "github",
+          token
+        });
+        sha = existing.sha || "";
+      } catch (error) {
+        if (error.status !== 404) throw error;
+      }
+
+      const body = {
+        message: "Update " + path + " via Sequence Diagram Editor",
+        content: encodeBase64Utf8(content),
+        branch: config.branch
+      };
+      if (sha) body.sha = sha;
+
+      await requestGitJson(baseUrl, {
+        method: "PUT",
+        provider: "github",
+        token,
+        body
+      });
+    }
+
+    async function listGiteaFiles(config, token) {
+      const directory = normalizeRepoPath(config.directory);
+      const pathPart = directory ? "/" + encodeRepoPath(directory) : "";
+      const url = trimSlash(config.apiBase) + "/repos/" + normalizeRepoPath(config.project) + "/contents" + pathPart + "?ref=" + encodeURIComponent(config.branch);
+      const response = await requestGitJson(url, {
+        provider: "gitea",
+        token
+      });
+      const entries = Array.isArray(response) ? response : [response];
+      return entries
+        .filter((item) => item && item.type === "file")
+        .map((item) => item.path)
+        .filter((path) => supportsSequenceFile(path))
+        .sort();
+    }
+
+    async function readGiteaFile(config, token, path) {
+      const url = trimSlash(config.apiBase) + "/repos/" + normalizeRepoPath(config.project) + "/contents/" + encodeRepoPath(path) + "?ref=" + encodeURIComponent(config.branch);
+      const response = await requestGitJson(url, {
+        provider: "gitea",
+        token
+      });
+      return decodeBase64Utf8((response.content || "").replace(/\n/g, ""));
+    }
+
+    async function writeGiteaFile(config, token, path, content) {
+      const baseUrl = trimSlash(config.apiBase) + "/repos/" + normalizeRepoPath(config.project) + "/contents/" + encodeRepoPath(path);
+      let sha = "";
+      try {
+        const existing = await requestGitJson(baseUrl + "?ref=" + encodeURIComponent(config.branch), {
+          provider: "gitea",
+          token
+        });
+        sha = existing.sha || "";
+      } catch (error) {
+        if (error.status !== 404) throw error;
+      }
+
+      const body = {
+        message: "Update " + path + " via Sequence Diagram Editor",
+        content: encodeBase64Utf8(content),
+        branch: config.branch
+      };
+      if (sha) body.sha = sha;
+
+      await requestGitJson(baseUrl, {
+        method: sha ? "PUT" : "POST",
+        provider: "gitea",
+        token,
+        body
+      });
+    }
+
+    async function listGitLabFiles(config, token) {
+      const projectId = encodeURIComponent(config.project);
+      const params = new URLSearchParams({
+        ref: config.branch,
+        per_page: "100"
+      });
+      if (config.directory) params.set("path", normalizeRepoPath(config.directory));
+      const url = trimSlash(config.apiBase) + "/projects/" + projectId + "/repository/tree?" + params.toString();
+      const response = await requestGitJson(url, {
+        provider: "gitlab",
+        token
+      });
+      return (Array.isArray(response) ? response : [])
+        .filter((item) => item.type === "blob" && supportsSequenceFile(item.path))
+        .map((item) => item.path)
+        .sort();
+    }
+
+    async function readGitLabFile(config, token, path) {
+      const projectId = encodeURIComponent(config.project);
+      const url = trimSlash(config.apiBase) + "/projects/" + projectId + "/repository/files/" + encodeURIComponent(normalizeRepoPath(path)) + "?ref=" + encodeURIComponent(config.branch);
+      const response = await requestGitJson(url, {
+        provider: "gitlab",
+        token
+      });
+      return decodeBase64Utf8((response.content || "").replace(/\n/g, ""));
+    }
+
+    async function writeGitLabFile(config, token, path, content) {
+      const projectId = encodeURIComponent(config.project);
+      const encodedPath = encodeURIComponent(normalizeRepoPath(path));
+      const url = trimSlash(config.apiBase) + "/projects/" + projectId + "/repository/files/" + encodedPath;
+
+      let exists = false;
+      try {
+        await requestGitJson(url + "?ref=" + encodeURIComponent(config.branch), {
+          provider: "gitlab",
+          token
+        });
+        exists = true;
+      } catch (error) {
+        if (error.status !== 404) throw error;
+      }
+
+      const body = {
+        branch: config.branch,
+        content,
+        commit_message: "Update " + path + " via Sequence Diagram Editor",
+        encoding: "text"
+      };
+
+      await requestGitJson(url, {
+        method: exists ? "PUT" : "POST",
+        provider: "gitlab",
+        token,
+        body
+      });
+    }
+
+    async function requestGitJson(url, options) {
+      const method = options.method || "GET";
+      const headers = {
+        Accept: "application/json"
+      };
+      if (options.token) {
+        if (options.provider === "gitlab") {
+          headers["PRIVATE-TOKEN"] = options.token;
+        } else if (options.provider === "gitea") {
+          headers.Authorization = "token " + options.token;
+        } else {
+          headers.Authorization = "Bearer " + options.token;
+        }
+      }
+
+      const fetchOptions = {
+        method,
+        headers
+      };
+      if (options.body) {
+        headers["Content-Type"] = "application/json";
+        fetchOptions.body = JSON.stringify(options.body);
+      }
+
+      const response = await fetch(url, fetchOptions);
+      const text = await response.text();
+      if (!response.ok) {
+        let message = response.status + " " + response.statusText;
+        if (text) {
+          try {
+            const parsed = JSON.parse(text);
+            message = parsed.message || parsed.error || parsed.error_description || message;
+          } catch (_error) {
+            message = text.slice(0, 200);
+          }
+        }
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+      }
+
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch (_error) {
+        return {};
+      }
+    }
+
+    function defaultGitApiBase(provider) {
+      if (provider === "gitlab") return "https://gitlab.com/api/v4";
+      if (provider === "gitea") return "https://your-git-server.example.com/api/v1";
+      return "https://api.github.com";
+    }
+
+    function supportsSequenceFile(path) {
+      const lower = String(path || "").toLowerCase();
+      return lower.endsWith(".puml") || lower.endsWith(".plantuml") || lower.endsWith(".iuml") || lower.endsWith(".uml") || lower.endsWith(".json");
+    }
+
+    function inferContentTypeFromPath(path) {
+      return String(path || "").toLowerCase().endsWith(".json") ? "json" : "plantuml";
+    }
+
+    function trimSlash(value) {
+      return String(value || "").replace(/\/+$/, "");
+    }
+
+    function normalizeRepoPath(value) {
+      return String(value || "")
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "")
+        .replace(/\/{2,}/g, "/");
+    }
+
+    function encodeRepoPath(path) {
+      return normalizeRepoPath(path).split("/").map(encodeURIComponent).join("/");
+    }
+
+    function joinRepoPath(left, right) {
+      const l = normalizeRepoPath(left);
+      const r = normalizeRepoPath(right);
+      if (!l) return r;
+      if (!r) return l;
+      return l + "/" + r;
+    }
+
+    function encodeBase64Utf8(text) {
+      const bytes = new TextEncoder().encode(String(text));
+      let binary = "";
+      bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+      });
+      return btoa(binary);
+    }
+
+    function decodeBase64Utf8(base64Text) {
+      const binary = atob(base64Text || "");
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new TextDecoder().decode(bytes);
     }
 
     function bindLayoutControls() {
