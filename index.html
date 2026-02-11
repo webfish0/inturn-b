@@ -1,0 +1,1699 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sequence Diagram Editor</title>
+  <style>
+    :root {
+      --bg: #f4f6fa;
+      --panel: #ffffff;
+      --ink: #101828;
+      --muted: #667085;
+      --accent: #0284c7;
+      --accent-soft: #e0f2fe;
+      --border: #dbe3ee;
+      --code-bg: #0a1020;
+      --code-ink: #e8eef9;
+      --danger: #be123c;
+      --warn: #ea580c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top right, #e6f0ff 0%, var(--bg) 42%);
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: #0f172a;
+      color: #f8fafc;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .title {
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      border: 1px solid #334155;
+      border-radius: 7px;
+      background: #111827;
+      color: #f8fafc;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #1f2937;
+    }
+
+    button.tool-btn {
+      background: #f8fbff;
+      color: var(--ink);
+      border-color: var(--border);
+      padding: 8px 10px;
+    }
+
+    button.tool-btn:hover {
+      background: #edf4fb;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 280px 1fr 340px;
+      grid-template-rows: 1fr 250px;
+      grid-template-areas:
+        "tools preview props"
+        "text text props";
+      gap: 10px;
+      padding: 10px;
+      min-height: calc(100vh - 56px);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+      min-height: 0;
+      padding: 10px;
+    }
+
+    .tools {
+      grid-area: tools;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .preview {
+      grid-area: preview;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .props {
+      grid-area: props;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .text {
+      grid-area: text;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    h3 {
+      margin: 4px 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 6px;
+    }
+
+    .preview-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .status {
+      font-size: 12px;
+      color: #0c4a6e;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      border-radius: 999px;
+      padding: 3px 8px;
+      white-space: nowrap;
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      border: 1px dashed #c6d5e9;
+      border-radius: 10px;
+      background: #f8fbff;
+      overflow: auto;
+      padding: 10px;
+      position: relative;
+    }
+
+    .items {
+      max-height: 200px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: #fbfcff;
+    }
+
+    .item-row {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .item-row:hover {
+      background: #eef5ff;
+    }
+
+    .item-row.active {
+      background: var(--accent-soft);
+      border-color: #7dd3fc;
+    }
+
+    .props form {
+      display: grid;
+      gap: 8px;
+    }
+
+    .props label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+    }
+
+    .props input, .props select {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px;
+      background: #fff;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    textarea {
+      width: 100%;
+      flex: 1;
+      min-height: 180px;
+      border-radius: 10px;
+      border: 1px solid #1f2937;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      font-family: "SFMono-Regular", Consolas, Monaco, monospace;
+      font-size: 13px;
+      padding: 10px;
+    }
+
+    .text-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .svg-item.selected {
+      filter: drop-shadow(0 0 5px rgba(2, 132, 199, 0.8));
+    }
+
+    .drag-handle {
+      cursor: grab;
+    }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    .editable {
+      cursor: text;
+    }
+
+    .endpoint-handle {
+      fill: #ffffff;
+      stroke: #0f172a;
+      stroke-width: 1.5;
+      cursor: ew-resize;
+    }
+
+    .endpoint-handle.from {
+      stroke: #0369a1;
+      fill: #e0f2fe;
+    }
+
+    .endpoint-handle.to {
+      stroke: #0f172a;
+      fill: #ffffff;
+    }
+
+    .fragment-resize-handle {
+      fill: #e0f2fe;
+      stroke: #0284c7;
+      stroke-width: 1.5;
+      cursor: ns-resize;
+    }
+
+    .inline-editor {
+      position: absolute;
+      z-index: 40;
+      border: 1px solid #7dd3fc;
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 13px;
+      background: #ffffff;
+      color: #0f172a;
+      min-width: 120px;
+    }
+
+    .context-menu {
+      position: fixed;
+      z-index: 60;
+      min-width: 200px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22);
+      padding: 6px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .context-menu button,
+    .context-menu label {
+      width: 100%;
+      text-align: left;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: #ffffff;
+      color: #0f172a;
+      padding: 7px 8px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .context-menu button:hover,
+    .context-menu label:hover {
+      background: #f1f5f9;
+      border-color: #dbe3ee;
+    }
+
+    .context-menu label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    @media (max-width: 1180px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+        grid-template-areas:
+          "tools"
+          "preview"
+          "props"
+          "text";
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">Sequence Diagram Editor</div>
+    <div class="toolbar">
+      <button id="btn-new">New</button>
+      <button id="btn-export-svg">Export SVG</button>
+      <button id="btn-export-png">Export PNG</button>
+      <button id="btn-export-jpeg">Export JPEG</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel tools">
+      <h3>Participants</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" data-add-participant="actor">Add Actor</button>
+        <button class="tool-btn" data-add-participant="boundary">Add Boundary</button>
+        <button class="tool-btn" data-add-participant="control">Add Control</button>
+        <button class="tool-btn" data-add-participant="entity">Add Entity</button>
+        <button class="tool-btn" data-add-participant="database">Add Database</button>
+      </div>
+
+      <h3>Messages</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" data-add-message="sync">Sync</button>
+        <button class="tool-btn" data-add-message="async">Async</button>
+        <button class="tool-btn" data-add-message="return">Return</button>
+        <button class="tool-btn" data-add-message="create">Create</button>
+        <button class="tool-btn" data-add-message="destroy">Destroy</button>
+      </div>
+
+      <h3>Notes</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" data-add-note="left">Note Left</button>
+        <button class="tool-btn" data-add-note="right">Note Right</button>
+        <button class="tool-btn" data-add-note="over">Note Over</button>
+      </div>
+
+      <h3>Logic Blocks</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" data-add-fragment="loop">Loop</button>
+        <button class="tool-btn" data-add-fragment="alt">Alt</button>
+        <button class="tool-btn" data-add-fragment="opt">Opt</button>
+        <button class="tool-btn" data-add-fragment="par">Par</button>
+      </div>
+
+      <h3>Diagram Items</h3>
+      <div class="items" id="items-list"></div>
+    </section>
+
+    <section class="panel preview">
+      <div class="preview-head">
+        <div>Preview</div>
+        <span class="status" id="status">Ready</span>
+      </div>
+      <div class="canvas-wrap" id="canvas-wrap">
+        <div id="preview-canvas"></div>
+      </div>
+    </section>
+
+    <section class="panel props">
+      <h3>Properties</h3>
+      <div id="props-empty" class="hint">Select an item to edit.</div>
+      <form id="props-form" hidden>
+        <label id="field-name">
+          Name / Label
+          <input id="prop-name" type="text">
+        </label>
+        <label id="field-type">
+          Type
+          <select id="prop-type"></select>
+        </label>
+        <label id="field-from">
+          From
+          <select id="prop-from"></select>
+        </label>
+        <label id="field-to">
+          To
+          <select id="prop-to"></select>
+        </label>
+        <label id="field-position">
+          Note Position
+          <select id="prop-position">
+            <option value="left">left</option>
+            <option value="right">right</option>
+            <option value="over">over</option>
+          </select>
+        </label>
+        <label id="field-note-row">
+          Note Y Offset
+          <input id="prop-note-row" type="number" min="-220">
+        </label>
+        <label id="field-start-index">
+          Fragment Start Message Index
+          <input id="prop-start-index" type="number" min="1">
+        </label>
+        <label id="field-end-index">
+          Fragment End Message Index
+          <input id="prop-end-index" type="number" min="1">
+        </label>
+      </form>
+      <div class="hint" id="props-hint"></div>
+      <div class="hint">Double-click labels to edit in place. Drag participants/messages/notes/fragments directly in preview. Drag arrow endpoint dots to change source and destination participants. Use fragment edge dots to resize logic boxes. Right-click an arrow for reverse, color, and dotted style.</div>
+    </section>
+
+    <section class="panel text">
+      <h3>PlantUML</h3>
+      <textarea id="uml-text"></textarea>
+      <div class="text-actions">
+        <button id="btn-apply-text">Apply Text</button>
+        <button id="btn-sync-text">Sync From Diagram</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="context-menu" class="context-menu" hidden>
+    <button id="ctx-reverse-arrow" type="button">Reverse Direction</button>
+    <label for="ctx-arrow-color">
+      Arrow Color
+      <input id="ctx-arrow-color" type="color" value="#0f172a">
+    </label>
+    <label for="ctx-arrow-dotted">
+      Dotted Arrow
+      <input id="ctx-arrow-dotted" type="checkbox">
+    </label>
+  </div>
+
+  <script>
+    const PARTICIPANT_TYPES = ["actor", "boundary", "control", "entity", "database"];
+    const MESSAGE_TYPES = ["sync", "async", "return", "create", "destroy"];
+    const FRAGMENT_TYPES = ["loop", "alt", "opt", "par"];
+
+    const state = {
+      participants: [],
+      messages: [],
+      notes: [],
+      fragments: [],
+      selection: null,
+      drag: null,
+      contextMenu: { open: false, messageId: null }
+    };
+
+    const layout = {
+      spacing: 180,
+      xStart: 90,
+      yStart: 110,
+      msgStep: 76
+    };
+
+    const previewCanvas = document.getElementById("preview-canvas");
+    const canvasWrap = document.getElementById("canvas-wrap");
+    const itemsList = document.getElementById("items-list");
+    const textArea = document.getElementById("uml-text");
+    const statusEl = document.getElementById("status");
+
+    const propsForm = document.getElementById("props-form");
+    const propsEmpty = document.getElementById("props-empty");
+    const propsHint = document.getElementById("props-hint");
+
+    const fieldName = document.getElementById("field-name");
+    const fieldType = document.getElementById("field-type");
+    const fieldFrom = document.getElementById("field-from");
+    const fieldTo = document.getElementById("field-to");
+    const fieldPosition = document.getElementById("field-position");
+    const fieldNoteRow = document.getElementById("field-note-row");
+    const fieldStartIndex = document.getElementById("field-start-index");
+    const fieldEndIndex = document.getElementById("field-end-index");
+
+    const propName = document.getElementById("prop-name");
+    const propType = document.getElementById("prop-type");
+    const propFrom = document.getElementById("prop-from");
+    const propTo = document.getElementById("prop-to");
+    const propPosition = document.getElementById("prop-position");
+    const propNoteRow = document.getElementById("prop-note-row");
+    const propStartIndex = document.getElementById("prop-start-index");
+    const propEndIndex = document.getElementById("prop-end-index");
+
+    const contextMenu = document.getElementById("context-menu");
+    const ctxReverseArrow = document.getElementById("ctx-reverse-arrow");
+    const ctxArrowColor = document.getElementById("ctx-arrow-color");
+    const ctxArrowDotted = document.getElementById("ctx-arrow-dotted");
+
+    function init() {
+      resetDiagram();
+      bindToolbar();
+      bindToolButtons();
+      bindProps();
+      bindTextControls();
+      bindContextMenu();
+      bindGlobalDrag();
+      render();
+    }
+
+    function resetDiagram() {
+      state.participants = [
+        { id: "p1", name: "User", type: "actor" },
+        { id: "p2", name: "UI", type: "boundary" },
+        { id: "p3", name: "API", type: "control" }
+      ];
+      state.messages = [
+        { id: "m1", fromId: "p1", toId: "p2", label: "click submit", type: "sync", color: "#0f172a", dotted: false },
+        { id: "m2", fromId: "p2", toId: "p3", label: "validate", type: "sync", color: "#0f172a", dotted: false },
+        { id: "m3", fromId: "p3", toId: "p2", label: "ok", type: "return", color: "#0f172a", dotted: false }
+      ];
+      state.notes = [
+        { id: "n1", targetId: "p2", text: "Client-side checks", position: "right", offsetY: 0 }
+      ];
+      state.fragments = [
+        { id: "f1", kind: "loop", label: "for each item", startIndex: 0, endIndex: 1 }
+      ];
+      state.selection = null;
+      state.drag = null;
+      state.contextMenu = { open: false, messageId: null };
+      closeContextMenu();
+      syncTextFromModel();
+    }
+
+    function bindToolbar() {
+      document.getElementById("btn-new").addEventListener("click", () => {
+        resetDiagram();
+        render();
+      });
+      document.getElementById("btn-export-svg").addEventListener("click", () => {
+        downloadBlob(buildSvg(), "diagram.svg", "image/svg+xml");
+      });
+      document.getElementById("btn-export-png").addEventListener("click", exportPng);
+      document.getElementById("btn-export-jpeg").addEventListener("click", exportJpeg);
+    }
+
+    function bindToolButtons() {
+      document.querySelectorAll("[data-add-participant]").forEach((btn) => {
+        btn.addEventListener("click", () => addParticipant(btn.getAttribute("data-add-participant")));
+      });
+      document.querySelectorAll("[data-add-message]").forEach((btn) => {
+        btn.addEventListener("click", () => addMessage(btn.getAttribute("data-add-message")));
+      });
+      document.querySelectorAll("[data-add-note]").forEach((btn) => {
+        btn.addEventListener("click", () => addNote(btn.getAttribute("data-add-note")));
+      });
+      document.querySelectorAll("[data-add-fragment]").forEach((btn) => {
+        btn.addEventListener("click", () => addFragment(btn.getAttribute("data-add-fragment")));
+      });
+    }
+
+    function bindProps() {
+      [propName, propType, propFrom, propTo, propPosition, propNoteRow, propStartIndex, propEndIndex].forEach((node) => {
+        node.addEventListener("input", applyProps);
+        node.addEventListener("change", applyProps);
+      });
+    }
+
+    function bindContextMenu() {
+      ctxReverseArrow.addEventListener("click", () => {
+        const message = getContextMenuMessage();
+        if (!message) return;
+        const source = message.fromId;
+        message.fromId = message.toId;
+        message.toId = source;
+        closeContextMenu();
+        render();
+      });
+
+      ctxArrowColor.addEventListener("input", () => {
+        const message = getContextMenuMessage();
+        if (!message) return;
+        message.color = ctxArrowColor.value;
+        closeContextMenu();
+        render();
+      });
+
+      ctxArrowColor.addEventListener("change", () => {
+        const message = getContextMenuMessage();
+        if (!message) return;
+        message.color = ctxArrowColor.value;
+        closeContextMenu();
+        render();
+      });
+
+      ctxArrowDotted.addEventListener("change", () => {
+        const message = getContextMenuMessage();
+        if (!message) return;
+        message.dotted = Boolean(ctxArrowDotted.checked);
+        closeContextMenu();
+        render();
+      });
+
+      document.addEventListener("pointerdown", (event) => {
+        if (!state.contextMenu.open) return;
+        if (event.button !== 0) return;
+        if (contextMenu.contains(event.target)) return;
+        closeContextMenu();
+      }, true);
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeContextMenu();
+      });
+    }
+
+    function bindTextControls() {
+      document.getElementById("btn-sync-text").addEventListener("click", syncTextFromModel);
+      document.getElementById("btn-apply-text").addEventListener("click", () => {
+        const parsed = parsePlantUml(textArea.value);
+        state.participants = parsed.participants;
+        state.messages = parsed.messages;
+        state.notes = parsed.notes;
+        state.fragments = parsed.fragments;
+        state.selection = null;
+        render();
+      });
+      textArea.addEventListener("click", selectFromTextCaret);
+      textArea.addEventListener("keyup", selectFromTextCaret);
+    }
+
+    function bindGlobalDrag() {
+      window.addEventListener("pointermove", (event) => {
+        if (!state.drag) return;
+        const modeText = state.drag.mode && state.drag.mode !== "move" ? " (" + state.drag.mode + ")" : "";
+        statusEl.textContent = "Dragging " + state.drag.kind + modeText + "...";
+        state.drag.lastX = event.clientX;
+        state.drag.lastY = event.clientY;
+      });
+
+      window.addEventListener("pointerup", (event) => {
+        if (!state.drag) return;
+        const drag = state.drag;
+        state.drag = null;
+        applyDrop(drag, event.clientX, event.clientY);
+        statusEl.textContent = "Rendered";
+      });
+    }
+
+    function addParticipant(type) {
+      const id = nextId(state.participants, "p");
+      state.participants.push({ id, name: capitalize(type) + " " + (state.participants.length + 1), type });
+      state.selection = { kind: "participant", id };
+      render();
+    }
+
+    function addMessage(type) {
+      if (state.participants.length < 2) return;
+      const id = nextId(state.messages, "m");
+      const message = {
+        id,
+        fromId: state.participants[0].id,
+        toId: state.participants[Math.min(1, state.participants.length - 1)].id,
+        label: type + " message",
+        type,
+        color: "#0f172a",
+        dotted: false
+      };
+
+      if (state.selection && state.selection.kind === "message") {
+        const selectedIndex = state.messages.findIndex((entry) => entry.id === state.selection.id);
+        if (selectedIndex >= 0) {
+          insertMessageAfterIndex(selectedIndex, message);
+        } else {
+          state.messages.push(message);
+        }
+      } else {
+        state.messages.push(message);
+      }
+
+      state.selection = { kind: "message", id };
+      render();
+    }
+
+    function addNote(position) {
+      if (!state.participants.length) return;
+      const id = nextId(state.notes, "n");
+      state.notes.push({
+        id,
+        targetId: state.participants[0].id,
+        text: "Note",
+        position,
+        offsetY: nextNoteOffset()
+      });
+      state.selection = { kind: "note", id };
+      render();
+    }
+
+    function addFragment(kind) {
+      const id = nextId(state.fragments, "f");
+      const selectedMsgIndex = state.selection && state.selection.kind === "message"
+        ? state.messages.findIndex((m) => m.id === state.selection.id)
+        : -1;
+      const start = selectedMsgIndex >= 0 ? selectedMsgIndex : 0;
+      const end = selectedMsgIndex >= 0 ? selectedMsgIndex : Math.max(0, state.messages.length - 1);
+      state.fragments.push({
+        id,
+        kind,
+        label: kind + " condition",
+        startIndex: start,
+        endIndex: end
+      });
+      state.selection = { kind: "fragment", id };
+      render();
+    }
+
+    function render() {
+      previewCanvas.innerHTML = buildSvg();
+      bindSvgInteractions();
+      renderItems();
+      renderProps();
+      syncTextFromModel();
+      statusEl.textContent = "Rendered";
+    }
+
+    function buildSvg() {
+      const spacing = layout.spacing;
+      const width = Math.max(680, state.participants.length * spacing + 160);
+      const maxNoteOffset = state.notes.reduce((max, note, index) => Math.max(max, normalizedNoteOffset(note, index)), 0);
+      const rows = Math.max(3, state.messages.length + Math.ceil(maxNoteOffset / 58) + 3);
+      const height = Math.max(420, layout.yStart + rows * layout.msgStep + 60);
+      const lifelineEnd = height - 50;
+
+      const groups = [];
+
+      state.fragments.forEach((fragment) => {
+        const y1 = messageY(clamp(fragment.startIndex, 0, Math.max(0, state.messages.length - 1))) - 26;
+        const y2 = messageY(clamp(fragment.endIndex, 0, Math.max(0, state.messages.length - 1))) + 26;
+        const x1 = 30;
+        const x2 = width - 30;
+        const cx = x2 - 12;
+        groups.push(
+          `<g class="svg-item" data-id="${fragment.id}" data-kind="fragment">` +
+          `<rect class="drag-handle" data-id="${fragment.id}" data-kind="fragment" data-drag-mode="move" x="${x1}" y="${y1}" width="${x2 - x1}" height="${Math.max(50, y2 - y1)}" rx="8" fill="none" stroke="#0ea5e9" stroke-dasharray="7 4" />` +
+          `<circle class="drag-handle fragment-resize-handle" data-id="${fragment.id}" data-kind="fragment" data-drag-mode="resize-start" cx="${cx}" cy="${y1}" r="7" />` +
+          `<circle class="drag-handle fragment-resize-handle" data-id="${fragment.id}" data-kind="fragment" data-drag-mode="resize-end" cx="${cx}" cy="${y2}" r="7" />` +
+          `<rect x="${x1 + 8}" y="${y1 + 6}" width="260" height="20" fill="#e0f2fe" opacity="0.9" />` +
+          `<text class="editable" data-id="${fragment.id}" data-kind="fragment" data-field="label" x="${x1 + 12}" y="${y1 + 20}" font-size="12" fill="#075985">${esc(fragment.kind + " " + fragment.label)}</text>` +
+          `</g>`
+        );
+      });
+
+      state.participants.forEach((participant, index) => {
+        const x = participantX(index);
+        const stroke = participant.type === "database" ? "#8b5cf6" : "#0ea5e9";
+        groups.push(
+          `<g class="svg-item" data-id="${participant.id}" data-kind="participant" transform="translate(${x},30)">` +
+          `<rect class="drag-handle" data-id="${participant.id}" data-kind="participant" x="-62" y="0" width="124" height="44" rx="8" fill="#e0f2fe" stroke="${stroke}" />` +
+          `<text class="editable" data-id="${participant.id}" data-kind="participant" data-field="name" x="0" y="26" text-anchor="middle" font-size="14" fill="#0f172a">${esc(participant.name)}</text>` +
+          `<line x1="0" y1="44" x2="0" y2="${lifelineEnd - 30}" stroke="#94a3b8" stroke-dasharray="6 4" />` +
+          `</g>`
+        );
+      });
+
+      state.messages.forEach((message, idx) => {
+        const fromIndex = state.participants.findIndex((p) => p.id === message.fromId);
+        const toIndex = state.participants.findIndex((p) => p.id === message.toId);
+        if (fromIndex < 0 || toIndex < 0) return;
+        const x1 = participantX(fromIndex);
+        const x2 = participantX(toIndex);
+        const y = messageY(idx);
+        const strokeColor = message.color || "#0f172a";
+        const dash = message.dotted ? ' stroke-dasharray="6 4"' : "";
+        groups.push(
+          `<g class="svg-item" data-id="${message.id}" data-kind="message">` +
+          `<line class="drag-handle" data-id="${message.id}" data-kind="message" data-drag-mode="move" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="transparent" stroke-width="16" />` +
+          `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${esc(strokeColor)}" stroke-width="2"${dash} marker-end="${markerFor(message.type)}" />` +
+          `<circle class="drag-handle endpoint-handle from" data-id="${message.id}" data-kind="message" data-drag-mode="from" cx="${x1}" cy="${y}" r="6" style="stroke:${esc(strokeColor)}" />` +
+          `<circle class="drag-handle endpoint-handle to" data-id="${message.id}" data-kind="message" data-drag-mode="to" cx="${x2}" cy="${y}" r="6" style="stroke:${esc(strokeColor)}" />` +
+          `<text class="editable" data-id="${message.id}" data-kind="message" data-field="label" x="${(x1 + x2) / 2}" y="${y - 8}" text-anchor="middle" font-size="13" fill="#0f172a">${esc(message.label)}</text>` +
+          `</g>`
+        );
+      });
+
+      state.notes.forEach((note) => {
+        const targetIndex = state.participants.findIndex((p) => p.id === note.targetId);
+        if (targetIndex < 0) return;
+        const baseX = participantX(targetIndex);
+        const y = noteY(note);
+        const x = note.position === "left" ? baseX - 160 : note.position === "right" ? baseX + 20 : baseX - 70;
+        groups.push(
+          `<g class="svg-item" data-id="${note.id}" data-kind="note">` +
+          `<rect class="drag-handle" data-id="${note.id}" data-kind="note" x="${x}" y="${y - 26}" width="140" height="50" rx="7" fill="#fff7ed" stroke="#ea580c" />` +
+          `<text class="editable" data-id="${note.id}" data-kind="note" data-field="text" x="${x + 10}" y="${y}" font-size="12" fill="#9a3412">${esc(note.text)}</text>` +
+          `</g>`
+        );
+      });
+
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#ffffff;border-radius:8px">
+        ${svgDefs()}
+        ${groups.join("")}
+      </svg>`;
+    }
+
+    function svgDefs() {
+      return `
+        <defs>
+          <marker id="arrow-sync" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+            <path d="M0,0 L12,4 L0,8 z" fill="context-stroke" />
+          </marker>
+          <marker id="arrow-async" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+            <path d="M0,0 L12,4 L0,8 z" fill="context-stroke" />
+          </marker>
+          <marker id="arrow-return" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+            <path d="M0,0 L12,4 L0,8 z" fill="context-stroke" />
+          </marker>
+          <marker id="arrow-destroy" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+            <path d="M0,0 L12,4 L0,8 z" fill="context-stroke" />
+          </marker>
+        </defs>
+      `;
+    }
+
+    function bindSvgInteractions() {
+      const svg = previewCanvas.querySelector("svg");
+      if (!svg) return;
+
+      previewCanvas.querySelectorAll('[data-kind="message"]').forEach((node) => {
+        node.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          const messageId = node.getAttribute("data-id");
+          openContextMenuForMessage(messageId, event.clientX, event.clientY);
+        });
+      });
+
+      previewCanvas.querySelectorAll("[data-id]").forEach((node) => {
+        node.addEventListener("click", (event) => {
+          closeContextMenu();
+          const id = event.currentTarget.getAttribute("data-id");
+          const kind = event.currentTarget.getAttribute("data-kind") || kindFromId(id);
+          state.selection = { kind, id };
+          refreshSelectionUi();
+        });
+      });
+
+      previewCanvas.querySelectorAll(".editable").forEach((node) => {
+        node.addEventListener("dblclick", (event) => {
+          event.stopPropagation();
+          startInlineEdit(event.currentTarget);
+        });
+      });
+
+      previewCanvas.querySelectorAll(".drag-handle").forEach((node) => {
+        node.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          closeContextMenu();
+          const id = node.getAttribute("data-id");
+          const kind = node.getAttribute("data-kind");
+          const mode = node.getAttribute("data-drag-mode") || "move";
+          state.drag = { kind, id, mode, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY };
+          state.selection = { kind, id };
+        });
+      });
+
+      previewCanvas.querySelectorAll(".svg-item").forEach((node) => {
+        const isSelected = state.selection && node.getAttribute("data-id") === state.selection.id;
+        node.classList.toggle("selected", Boolean(isSelected));
+      });
+    }
+
+    function refreshSelectionUi() {
+      renderItems();
+      renderProps();
+      highlightSelectionInSvg();
+    }
+
+    function highlightSelectionInSvg() {
+      previewCanvas.querySelectorAll(".svg-item").forEach((node) => {
+        const isSelected = state.selection && node.getAttribute("data-id") === state.selection.id;
+        node.classList.toggle("selected", Boolean(isSelected));
+      });
+    }
+
+    function renderItems() {
+      itemsList.innerHTML = "";
+      const rows = [
+        ...state.participants.map((item) => ({ id: item.id, kind: "participant", label: "Participant: " + item.name })),
+        ...state.messages.map((item, index) => ({ id: item.id, kind: "message", label: "Message " + (index + 1) + ": " + item.label })),
+        ...state.fragments.map((item) => ({ id: item.id, kind: "fragment", label: "Fragment: " + item.kind + " " + item.label })),
+        ...state.notes.map((item) => ({ id: item.id, kind: "note", label: "Note: " + item.text }))
+      ];
+      rows.forEach((row) => {
+        const div = document.createElement("div");
+        div.className = "item-row" + (state.selection && state.selection.id === row.id ? " active" : "");
+        div.textContent = row.label;
+        div.addEventListener("click", () => {
+          state.selection = { kind: row.kind, id: row.id };
+          render();
+        });
+        itemsList.appendChild(div);
+      });
+    }
+
+    function renderProps() {
+      if (!state.selection) {
+        propsForm.hidden = true;
+        propsEmpty.hidden = false;
+        propsHint.textContent = "";
+        return;
+      }
+
+      propsEmpty.hidden = true;
+      propsForm.hidden = false;
+
+      const item = findBySelection(state.selection);
+      if (!item) return;
+
+      setField(fieldName, false);
+      setField(fieldType, false);
+      setField(fieldFrom, false);
+      setField(fieldTo, false);
+      setField(fieldPosition, false);
+      setField(fieldNoteRow, false);
+      setField(fieldStartIndex, false);
+      setField(fieldEndIndex, false);
+
+      if (state.selection.kind === "participant") {
+        setField(fieldName, true);
+        setField(fieldType, true);
+        propName.value = item.name;
+        fillSelect(propType, PARTICIPANT_TYPES, item.type);
+        propsHint.textContent = "Participant properties";
+      } else if (state.selection.kind === "message") {
+        setField(fieldName, true);
+        setField(fieldType, true);
+        setField(fieldFrom, true);
+        setField(fieldTo, true);
+        propName.value = item.label;
+        fillSelect(propType, MESSAGE_TYPES, item.type);
+        fillParticipantSelect(propFrom, item.fromId);
+        fillParticipantSelect(propTo, item.toId);
+        propsHint.textContent = "Message properties";
+      } else if (state.selection.kind === "note") {
+        setField(fieldName, true);
+        setField(fieldPosition, true);
+        setField(fieldNoteRow, true);
+        propName.value = item.text;
+        propPosition.value = item.position;
+        propNoteRow.value = Math.round(normalizedNoteOffset(item, state.notes.indexOf(item)));
+        propsHint.textContent = "Note properties";
+      } else if (state.selection.kind === "fragment") {
+        setField(fieldName, true);
+        setField(fieldType, true);
+        setField(fieldStartIndex, true);
+        setField(fieldEndIndex, true);
+        propName.value = item.label;
+        fillSelect(propType, FRAGMENT_TYPES, item.kind);
+        propStartIndex.value = item.startIndex + 1;
+        propEndIndex.value = item.endIndex + 1;
+        propsHint.textContent = "Fragment properties";
+      }
+    }
+
+    function applyProps() {
+      if (!state.selection) return;
+      const item = findBySelection(state.selection);
+      if (!item) return;
+
+      if (state.selection.kind === "participant") {
+        item.name = propName.value;
+        item.type = propType.value || item.type;
+      } else if (state.selection.kind === "message") {
+        item.label = propName.value;
+        item.type = propType.value || item.type;
+        item.fromId = propFrom.value || item.fromId;
+        item.toId = propTo.value || item.toId;
+      } else if (state.selection.kind === "note") {
+        item.text = propName.value;
+        item.position = propPosition.value || item.position;
+        item.offsetY = clamp(Number(propNoteRow.value) || 0, -220, 2200);
+      } else if (state.selection.kind === "fragment") {
+        item.label = propName.value;
+        item.kind = propType.value || item.kind;
+        item.startIndex = clamp((Number(propStartIndex.value) || 1) - 1, 0, Math.max(0, state.messages.length - 1));
+        item.endIndex = clamp((Number(propEndIndex.value) || 1) - 1, item.startIndex, Math.max(item.startIndex, state.messages.length - 1));
+      }
+
+      render();
+    }
+
+    function startInlineEdit(target) {
+      const id = target.getAttribute("data-id");
+      const kind = target.getAttribute("data-kind");
+      const field = target.getAttribute("data-field");
+      const item = findBySelection({ kind, id });
+      if (!item || !field) return;
+
+      removeInlineEditor();
+
+      const bbox = target.getBoundingClientRect();
+      const wrapBox = canvasWrap.getBoundingClientRect();
+      const editor = document.createElement("input");
+      editor.className = "inline-editor";
+      editor.value = item[field] || "";
+      editor.style.left = (bbox.left - wrapBox.left + canvasWrap.scrollLeft) + "px";
+      editor.style.top = (bbox.top - wrapBox.top + canvasWrap.scrollTop - 4) + "px";
+      editor.dataset.kind = kind;
+      editor.dataset.id = id;
+      editor.dataset.field = field;
+      canvasWrap.appendChild(editor);
+      editor.focus();
+      editor.select();
+
+      const commit = () => {
+        const current = findBySelection({ kind, id });
+        if (current) {
+          current[field] = editor.value.trim() || current[field];
+        }
+        removeInlineEditor();
+        render();
+      };
+
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") commit();
+        if (event.key === "Escape") {
+          removeInlineEditor();
+          render();
+        }
+      });
+      editor.addEventListener("blur", commit);
+    }
+
+    function removeInlineEditor() {
+      const existing = canvasWrap.querySelector(".inline-editor");
+      if (existing) existing.remove();
+    }
+
+    function openContextMenuForMessage(messageId, clientX, clientY) {
+      const message = state.messages.find((m) => m.id === messageId);
+      if (!message) return;
+
+      removeInlineEditor();
+      state.contextMenu.open = true;
+      state.contextMenu.messageId = messageId;
+
+      ctxArrowColor.value = normalizeColor(message.color || "#0f172a");
+      ctxArrowDotted.checked = Boolean(message.dotted);
+
+      contextMenu.hidden = false;
+      const width = 220;
+      const height = 132;
+      const x = Math.max(6, Math.min(window.innerWidth - width - 6, clientX));
+      const y = Math.max(6, Math.min(window.innerHeight - height - 6, clientY));
+      contextMenu.style.left = x + "px";
+      contextMenu.style.top = y + "px";
+    }
+
+    function closeContextMenu() {
+      state.contextMenu.open = false;
+      state.contextMenu.messageId = null;
+      contextMenu.hidden = true;
+    }
+
+    function getContextMenuMessage() {
+      if (!state.contextMenu.open || !state.contextMenu.messageId) return null;
+      return state.messages.find((m) => m.id === state.contextMenu.messageId) || null;
+    }
+
+    function applyDrop(drag, clientX, clientY) {
+      const point = toSvgPoint(clientX, clientY);
+      if (!point) return;
+
+      if (drag.kind === "participant") {
+        const fromIndex = state.participants.findIndex((p) => p.id === drag.id);
+        if (fromIndex < 0) return;
+        const toIndex = clamp(Math.round((point.x - layout.xStart) / layout.spacing), 0, state.participants.length - 1);
+        reorderArray(state.participants, fromIndex, toIndex);
+        state.selection = { kind: "participant", id: drag.id };
+      } else if (drag.kind === "message") {
+        const message = state.messages.find((m) => m.id === drag.id);
+        if (!message) return;
+        if (drag.mode === "from" || drag.mode === "to") {
+          const participantIndex = clamp(Math.round((point.x - layout.xStart) / layout.spacing), 0, state.participants.length - 1);
+          const participantId = state.participants[participantIndex]?.id;
+          if (participantId) {
+            if (drag.mode === "from") message.fromId = participantId;
+            if (drag.mode === "to") message.toId = participantId;
+          }
+        } else {
+          const fromIndex = state.messages.findIndex((m) => m.id === drag.id);
+          if (fromIndex < 0) return;
+          const toIndex = clamp(Math.round((point.y - layout.yStart) / layout.msgStep), 0, Math.max(0, state.messages.length - 1));
+          const targetFragmentIds = fragmentIdsAtY(point.y);
+          const sourceFragmentIds = fragmentIdsContainingIndex(fromIndex);
+          reorderArray(state.messages, fromIndex, toIndex);
+          fixFragmentsAfterMessageMove(fromIndex, toIndex);
+          const movedIndex = state.messages.findIndex((m) => m.id === drag.id);
+          sourceFragmentIds.forEach((fragmentId) => {
+            if (!targetFragmentIds.includes(fragmentId)) {
+              ensureMessageOutsideFragment(fragmentId, movedIndex);
+            }
+          });
+          targetFragmentIds.forEach((fragmentId) => {
+            ensureMessageInsideFragment(fragmentId, movedIndex);
+          });
+        }
+        state.selection = { kind: "message", id: drag.id };
+      } else if (drag.kind === "note") {
+        const note = state.notes.find((n) => n.id === drag.id);
+        if (!note) return;
+        const participantIndex = clamp(Math.round((point.x - layout.xStart) / layout.spacing), 0, state.participants.length - 1);
+        note.targetId = state.participants[participantIndex].id;
+        note.offsetY = clamp(Math.round(point.y - noteBaseY()), -220, 2200);
+        state.selection = { kind: "note", id: drag.id };
+      } else if (drag.kind === "fragment") {
+        const fragment = state.fragments.find((f) => f.id === drag.id);
+        if (!fragment) return;
+        const maxIndex = Math.max(0, state.messages.length - 1);
+        if (drag.mode === "resize-start") {
+          const nextStart = clamp(Math.round((point.y - layout.yStart) / layout.msgStep), 0, fragment.endIndex);
+          fragment.startIndex = nextStart;
+        } else if (drag.mode === "resize-end") {
+          const nextEnd = clamp(Math.round((point.y - layout.yStart) / layout.msgStep), fragment.startIndex, maxIndex);
+          fragment.endIndex = nextEnd;
+        } else {
+          const centerIndex = clamp(Math.round((point.y - layout.yStart) / layout.msgStep), 0, maxIndex);
+          const span = Math.max(0, fragment.endIndex - fragment.startIndex);
+          fragment.startIndex = clamp(centerIndex, 0, maxIndex);
+          fragment.endIndex = clamp(fragment.startIndex + span, fragment.startIndex, Math.max(fragment.startIndex, maxIndex));
+        }
+        state.selection = { kind: "fragment", id: drag.id };
+      }
+
+      render();
+    }
+
+    function insertMessageAfterIndex(selectedIndex, message) {
+      const insertIndex = clamp(selectedIndex + 1, 0, state.messages.length);
+      state.messages.splice(insertIndex, 0, message);
+
+      // Keep selected message context: inserting after a line inside a fragment should keep the new line inside.
+      state.fragments.forEach((fragment) => {
+        const oldStart = fragment.startIndex;
+        const oldEnd = fragment.endIndex;
+        const selectedInside = selectedIndex >= oldStart && selectedIndex <= oldEnd;
+
+        if (oldStart >= insertIndex) {
+          fragment.startIndex = oldStart + 1;
+          fragment.endIndex = oldEnd + 1;
+        } else if (oldEnd >= insertIndex) {
+          fragment.startIndex = oldStart;
+          fragment.endIndex = oldEnd + 1;
+        } else if (selectedInside && insertIndex === oldEnd + 1) {
+          fragment.startIndex = oldStart;
+          fragment.endIndex = oldEnd + 1;
+        }
+      });
+    }
+
+    function fixFragmentsAfterMessageMove(fromIndex, toIndex) {
+      state.fragments.forEach((fragment) => {
+        const mappedStart = mapIndexAfterMove(fragment.startIndex, fromIndex, toIndex);
+        const mappedEnd = mapIndexAfterMove(fragment.endIndex, fromIndex, toIndex);
+        fragment.startIndex = Math.min(mappedStart, mappedEnd);
+        fragment.endIndex = Math.max(mappedStart, mappedEnd);
+        fragment.startIndex = clamp(fragment.startIndex, 0, Math.max(0, state.messages.length - 1));
+        fragment.endIndex = clamp(fragment.endIndex, fragment.startIndex, Math.max(fragment.startIndex, state.messages.length - 1));
+      });
+    }
+
+    function mapIndexAfterMove(index, fromIndex, toIndex) {
+      if (fromIndex === toIndex) return index;
+      if (fromIndex < toIndex) {
+        if (index === fromIndex) return toIndex;
+        if (index > fromIndex && index <= toIndex) return index - 1;
+        return index;
+      }
+      if (index === fromIndex) return toIndex;
+      if (index >= toIndex && index < fromIndex) return index + 1;
+      return index;
+    }
+
+    function fragmentIdsAtY(y) {
+      const hits = state.fragments
+        .filter((fragment) => {
+          const y1 = messageY(clamp(fragment.startIndex, 0, Math.max(0, state.messages.length - 1))) - 30;
+          const y2 = messageY(clamp(fragment.endIndex, 0, Math.max(0, state.messages.length - 1))) + 30;
+          return y >= y1 && y <= y2;
+        })
+        .sort((a, b) => (a.endIndex - a.startIndex) - (b.endIndex - b.startIndex));
+      return hits.map((fragment) => fragment.id);
+    }
+
+    function ensureMessageInsideFragment(fragmentId, messageIndex) {
+      if (messageIndex < 0) return;
+      const fragment = state.fragments.find((entry) => entry.id === fragmentId);
+      if (!fragment) return;
+      fragment.startIndex = Math.min(fragment.startIndex, messageIndex);
+      fragment.endIndex = Math.max(fragment.endIndex, messageIndex);
+    }
+
+    function ensureMessageOutsideFragment(fragmentId, messageIndex) {
+      if (messageIndex < 0) return;
+      const fragment = state.fragments.find((entry) => entry.id === fragmentId);
+      if (!fragment) return;
+      if (messageIndex < fragment.startIndex || messageIndex > fragment.endIndex) return;
+
+      if (fragment.startIndex === fragment.endIndex && fragment.startIndex === messageIndex) {
+        state.fragments = state.fragments.filter((entry) => entry.id !== fragmentId);
+        return;
+      }
+
+      if (messageIndex === fragment.startIndex) {
+        fragment.startIndex += 1;
+        return;
+      }
+
+      if (messageIndex === fragment.endIndex) {
+        fragment.endIndex -= 1;
+        return;
+      }
+
+      const distToStart = messageIndex - fragment.startIndex;
+      const distToEnd = fragment.endIndex - messageIndex;
+      if (distToStart <= distToEnd) {
+        fragment.startIndex = messageIndex + 1;
+      } else {
+        fragment.endIndex = messageIndex - 1;
+      }
+    }
+
+    function fragmentIdsContainingIndex(index) {
+      return state.fragments
+        .filter((fragment) => index >= fragment.startIndex && index <= fragment.endIndex)
+        .map((fragment) => fragment.id);
+    }
+
+    function syncTextFromModel() {
+      textArea.value = serializePlantUml();
+    }
+
+    function serializePlantUml() {
+      const lines = ["@startuml"];
+      state.participants.forEach((participant) => {
+        lines.push(`${participant.type} ${participant.name}`);
+      });
+
+      const opensByIndex = new Map();
+      const closesByIndex = new Map();
+      state.fragments.forEach((fragment) => {
+        if (!opensByIndex.has(fragment.startIndex)) opensByIndex.set(fragment.startIndex, []);
+        opensByIndex.get(fragment.startIndex).push(fragment);
+        if (!closesByIndex.has(fragment.endIndex)) closesByIndex.set(fragment.endIndex, []);
+        closesByIndex.get(fragment.endIndex).push(fragment);
+      });
+
+      state.messages.forEach((message, index) => {
+        const opens = opensByIndex.get(index) || [];
+        opens.sort((a, b) => (b.endIndex - b.startIndex) - (a.endIndex - a.startIndex));
+        opens.forEach((fragment) => {
+          lines.push(`${fragment.kind} ${fragment.label}`.trim());
+        });
+
+        lines.push(`${findParticipantName(message.fromId)} ${arrowFromType(message.type)} ${findParticipantName(message.toId)}: ${message.label}`);
+        if (message.dotted || (message.color && message.color.toLowerCase() !== "#0f172a")) {
+          const colorValue = normalizeColor(message.color || "#0f172a");
+          const dottedValue = message.dotted ? "1" : "0";
+          lines.push(`' style color=${colorValue} dotted=${dottedValue}`);
+        }
+
+        const closes = closesByIndex.get(index) || [];
+        closes.sort((a, b) => (a.endIndex - a.startIndex) - (b.endIndex - b.startIndex));
+        closes.forEach(() => lines.push("end"));
+      });
+
+      state.notes.forEach((note) => {
+        lines.push(`note ${note.position} ${findParticipantName(note.targetId)}: ${note.text}`);
+        const offset = Math.round(normalizedNoteOffset(note, state.notes.indexOf(note)));
+        if (offset !== 0) {
+          lines.push(`' note-offset ${offset}`);
+        }
+      });
+
+      lines.push("@enduml");
+      return lines.join("\n");
+    }
+
+    function parsePlantUml(text) {
+      const participants = [];
+      const messages = [];
+      const notes = [];
+      const fragments = [];
+      const names = new Map();
+      const stack = [];
+
+      let p = 1;
+      let m = 1;
+      let n = 1;
+      let f = 1;
+      let lastMessage = null;
+      let lastNote = null;
+
+      const lines = text.split("\n").map((line) => line.trim());
+      lines.forEach((line) => {
+        if (!line || line === "@startuml" || line === "@enduml" || line.startsWith("title ")) return;
+
+        const styleMatch = line.match(/^'\s*style\s+(.*)$/i);
+        if (styleMatch) {
+          if (!lastMessage) return;
+          const colorMatch = styleMatch[1].match(/color=([#A-Za-z0-9]+)/i);
+          const dottedMatch = styleMatch[1].match(/dotted=([01truefalse]+)/i);
+          if (colorMatch) lastMessage.color = normalizeColor(colorMatch[1]);
+          if (dottedMatch) {
+            const raw = dottedMatch[1].toLowerCase();
+            lastMessage.dotted = raw === "1" || raw === "true";
+          }
+          return;
+        }
+
+        const noteOffsetMatch = line.match(/^'\s*note-offset\s+(-?\d+)$/i);
+        if (noteOffsetMatch) {
+          if (lastNote) lastNote.offsetY = clamp(Number(noteOffsetMatch[1]), -220, 2200);
+          return;
+        }
+
+        const noteRowMatch = line.match(/^'\s*note-row\s+(\d+)$/i);
+        if (noteRowMatch) {
+          if (lastNote) lastNote.offsetY = clamp(Number(noteRowMatch[1]) * 58, -220, 2200);
+          return;
+        }
+
+        const participantMatch = line.match(/^(actor|boundary|control|entity|database)\s+("?[\w .-]+"?)$/i);
+        if (participantMatch) {
+          const type = participantMatch[1].toLowerCase();
+          const name = participantMatch[2].replace(/"/g, "");
+          if (!names.has(name)) {
+            const id = "p" + p++;
+            participants.push({ id, name, type });
+            names.set(name, id);
+          }
+          return;
+        }
+
+        const fragmentStartMatch = line.match(/^(loop|alt|opt|par)\s*(.*)$/i);
+        if (fragmentStartMatch) {
+          const id = "f" + f++;
+          const kind = fragmentStartMatch[1].toLowerCase();
+          const label = fragmentStartMatch[2] || kind + " condition";
+          stack.push({ id, kind, label, startIndex: messages.length, endIndex: messages.length });
+          return;
+        }
+
+        if (line.toLowerCase() === "end") {
+          const open = stack.pop();
+          if (open) {
+            open.endIndex = Math.max(open.startIndex, messages.length - 1);
+            fragments.push(open);
+          }
+          return;
+        }
+
+        const messageMatch = line.match(/^("?[\w .-]+"?)\s*([-\.<>{}x]+)\s*("?[\w .-]+"?)\s*:? ?(.*)$/);
+        if (messageMatch) {
+          const fromName = messageMatch[1].replace(/"/g, "");
+          const toName = messageMatch[3].replace(/"/g, "");
+          const fromId = ensureParticipant(fromName, participants, names, () => "p" + p++);
+          const toId = ensureParticipant(toName, participants, names, () => "p" + p++);
+          messages.push({
+            id: "m" + m++,
+            fromId,
+            toId,
+            label: messageMatch[4] || "",
+            type: typeFromArrow(messageMatch[2]),
+            color: "#0f172a",
+            dotted: false
+          });
+          lastMessage = messages[messages.length - 1];
+          lastNote = null;
+          return;
+        }
+
+        const noteMatch = line.match(/^note\s+(left|right|over)\s+("?[\w .-]+"?)\s*:? ?(.*)$/i);
+        if (noteMatch) {
+          const targetName = noteMatch[2].replace(/"/g, "");
+          const targetId = ensureParticipant(targetName, participants, names, () => "p" + p++);
+          notes.push({
+            id: "n" + n++,
+            targetId,
+            text: noteMatch[3] || "",
+            position: noteMatch[1].toLowerCase(),
+            offsetY: notes.length * 58
+          });
+          lastNote = notes[notes.length - 1];
+          lastMessage = null;
+        }
+      });
+
+      while (stack.length) {
+        const open = stack.pop();
+        open.endIndex = Math.max(open.startIndex, messages.length - 1);
+        fragments.push(open);
+      }
+
+      return {
+        participants,
+        messages,
+        notes,
+        fragments
+      };
+    }
+
+    function selectFromTextCaret() {
+      const cursor = textArea.selectionStart || 0;
+      const line = textArea.value.slice(0, cursor).split("\n").pop() || "";
+      const selection = selectionFromLine(line.trim());
+      if (!selection) return;
+      state.selection = selection;
+      render();
+    }
+
+    function selectionFromLine(line) {
+      if (!line) return null;
+
+      const participantMatch = line.match(/^(actor|boundary|control|entity|database)\s+("?[\w .-]+"?)$/i);
+      if (participantMatch) {
+        const name = participantMatch[2].replace(/"/g, "");
+        const item = state.participants.find((p) => p.name === name);
+        if (item) return { kind: "participant", id: item.id };
+      }
+
+      const fragmentMatch = line.match(/^(loop|alt|opt|par)\s*(.*)$/i);
+      if (fragmentMatch) {
+        const kind = fragmentMatch[1].toLowerCase();
+        const label = fragmentMatch[2] || "";
+        const item = state.fragments.find((f) => f.kind === kind && (label ? f.label === label : true));
+        if (item) return { kind: "fragment", id: item.id };
+      }
+
+      const messageMatch = line.match(/^("?[\w .-]+"?)\s*([-\.<>{}x]+)\s*("?[\w .-]+"?)\s*:? ?(.*)$/);
+      if (messageMatch) {
+        const fromName = messageMatch[1].replace(/"/g, "");
+        const toName = messageMatch[3].replace(/"/g, "");
+        const item = state.messages.find((m) => {
+          return findParticipantName(m.fromId) === fromName && findParticipantName(m.toId) === toName;
+        });
+        if (item) return { kind: "message", id: item.id };
+      }
+
+      const noteMatch = line.match(/^note\s+(left|right|over)\s+("?[\w .-]+"?)\s*:? ?(.*)$/i);
+      if (noteMatch) {
+        const targetName = noteMatch[2].replace(/"/g, "");
+        const item = state.notes.find((n) => findParticipantName(n.targetId) === targetName);
+        if (item) return { kind: "note", id: item.id };
+      }
+
+      return null;
+    }
+
+    function exportPng() {
+      exportRaster("image/png", "diagram.png");
+    }
+
+    function exportJpeg() {
+      exportRaster("image/jpeg", "diagram.jpeg", 0.92);
+    }
+
+    function exportRaster(mime, name, quality) {
+      const svg = buildSvg();
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width * 2;
+        canvas.height = image.height * 2;
+        const ctx = canvas.getContext("2d");
+        if (mime === "image/jpeg") {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.setTransform(2, 0, 0, 2, 0, 0);
+        ctx.drawImage(image, 0, 0);
+        canvas.toBlob((imgBlob) => {
+          if (imgBlob) downloadBlob(imgBlob, name, mime);
+        }, mime, quality);
+      };
+      image.src = url;
+    }
+
+    function downloadBlob(content, name, mime) {
+      const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 300);
+    }
+
+    function findBySelection(selection) {
+      if (!selection) return null;
+      if (selection.kind === "participant") return state.participants.find((p) => p.id === selection.id);
+      if (selection.kind === "message") return state.messages.find((m) => m.id === selection.id);
+      if (selection.kind === "note") return state.notes.find((n) => n.id === selection.id);
+      if (selection.kind === "fragment") return state.fragments.find((f) => f.id === selection.id);
+      return null;
+    }
+
+    function fillSelect(selectNode, values, selectedValue) {
+      selectNode.innerHTML = "";
+      values.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        selectNode.appendChild(option);
+      });
+      selectNode.value = selectedValue || values[0];
+    }
+
+    function fillParticipantSelect(selectNode, selectedId) {
+      selectNode.innerHTML = "";
+      state.participants.forEach((participant) => {
+        const option = document.createElement("option");
+        option.value = participant.id;
+        option.textContent = participant.name;
+        selectNode.appendChild(option);
+      });
+      selectNode.value = selectedId;
+    }
+
+    function findParticipantName(id) {
+      return state.participants.find((p) => p.id === id)?.name || "";
+    }
+
+    function ensureParticipant(name, participants, names, nextIdFn) {
+      if (names.has(name)) return names.get(name);
+      const id = nextIdFn();
+      participants.push({ id, name, type: "entity" });
+      names.set(name, id);
+      return id;
+    }
+
+    function kindFromId(id) {
+      if (id.startsWith("p")) return "participant";
+      if (id.startsWith("m")) return "message";
+      if (id.startsWith("n")) return "note";
+      if (id.startsWith("f")) return "fragment";
+      return "";
+    }
+
+    function participantX(index) {
+      return layout.xStart + index * layout.spacing;
+    }
+
+    function messageY(index) {
+      return layout.yStart + index * layout.msgStep;
+    }
+
+    function noteY(note) {
+      return noteBaseY() + normalizedNoteOffset(note, state.notes.indexOf(note));
+    }
+
+    function noteBaseY() {
+      return layout.yStart + Math.max(1, state.messages.length) * layout.msgStep + 14;
+    }
+
+    function nextNoteOffset() {
+      if (!state.notes.length) return 0;
+      return state.notes.reduce((max, note, index) => Math.max(max, normalizedNoteOffset(note, index)), 0) + 58;
+    }
+
+    function normalizedNoteOffset(note, index) {
+      if (Number.isFinite(Number(note.offsetY))) return Number(note.offsetY);
+      if (Number.isFinite(Number(note.row))) return Number(note.row) * 58;
+      return (index >= 0 ? index : 0) * 58;
+    }
+
+    function toSvgPoint(clientX, clientY) {
+      const svg = previewCanvas.querySelector("svg");
+      if (!svg) return null;
+      const rect = svg.getBoundingClientRect();
+      const viewWidth = Number(svg.getAttribute("width"));
+      const viewHeight = Number(svg.getAttribute("height"));
+      if (!rect.width || !rect.height) return null;
+      const x = ((clientX - rect.left) / rect.width) * viewWidth;
+      const y = ((clientY - rect.top) / rect.height) * viewHeight;
+      return { x, y };
+    }
+
+    function markerFor(type) {
+      if (type === "async") return "url(#arrow-async)";
+      if (type === "return") return "url(#arrow-return)";
+      if (type === "destroy") return "url(#arrow-destroy)";
+      return "url(#arrow-sync)";
+    }
+
+    function arrowFromType(type) {
+      if (type === "async") return "->>";
+      if (type === "return") return "-->";
+      if (type === "destroy") return "--x";
+      return "->";
+    }
+
+    function typeFromArrow(arrow) {
+      if (arrow.includes(">>")) return "async";
+      if (arrow.includes("--x")) return "destroy";
+      if (arrow.includes("-->")) return "return";
+      return "sync";
+    }
+
+    function nextId(collection, prefix) {
+      let max = 0;
+      collection.forEach((entry) => {
+        const match = entry.id.match(new RegExp("^" + prefix + "(\\d+)$"));
+        if (match) max = Math.max(max, Number(match[1]));
+      });
+      return prefix + (max + 1);
+    }
+
+    function reorderArray(collection, fromIndex, toIndex) {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= collection.length || toIndex >= collection.length) return;
+      const item = collection.splice(fromIndex, 1)[0];
+      collection.splice(toIndex, 0, item);
+    }
+
+    function setField(fieldNode, visible) {
+      fieldNode.style.display = visible ? "flex" : "none";
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function capitalize(text) {
+      if (!text) return text;
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function esc(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function normalizeColor(value) {
+      if (!value) return "#0f172a";
+      const raw = String(value).trim();
+      if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
+      if (/^#[0-9a-f]{3}$/i.test(raw)) {
+        const r = raw[1];
+        const g = raw[2];
+        const b = raw[3];
+        return ("#" + r + r + g + g + b + b).toLowerCase();
+      }
+      return "#0f172a";
+    }
+
+    init();
+  </script>
+</body>
+</html>
