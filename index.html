@@ -1130,7 +1130,7 @@
         { id: "m3", fromId: "p3", toId: "p2", label: "ok", type: "return", color: "#0f172a", dotted: false }
       ];
       state.notes = [
-        { id: "n1", targetId: "p2", text: "Client-side checks", position: "right", offsetY: 0 }
+        { id: "n1", targetId: "p2", text: "Client-side checks", position: "right", offsetY: 0, anchorIndex: 2 }
       ];
       state.fragments = [
         { id: "f1", kind: "loop", label: "for each item", startIndex: 0, endIndex: 1 }
@@ -2524,7 +2524,10 @@
         targetId: String(item.targetId || state.participants[0]?.id || ""),
         text: String(item.text || ""),
         position: ["left", "right", "over"].includes(item.position) ? item.position : "right",
-        offsetY: clamp(Number(item.offsetY) || 0, -220, 2200)
+        offsetY: clamp(Number(item.offsetY) || 0, -220, 2200),
+        anchorIndex: Number.isFinite(Number(item.anchorIndex))
+          ? clamp(Number(item.anchorIndex), 0, Math.max(0, state.messages.length - 1))
+          : null
       }));
       state.fragments = model.fragments.map((item, index) => ({
         id: String(item.id || ("f" + (index + 1))),
@@ -2989,12 +2992,17 @@
     function addNote(position) {
       if (!state.participants.length) return;
       const id = nextId(state.notes, "n");
+      const selectedMsgIndex = state.selection && state.selection.kind === "message"
+        ? state.messages.findIndex((m) => m.id === state.selection.id)
+        : -1;
+      const selectedMessage = selectedMsgIndex >= 0 ? state.messages[selectedMsgIndex] : null;
       state.notes.push({
         id,
-        targetId: state.participants[0].id,
+        targetId: selectedMessage ? selectedMessage.toId : state.participants[0].id,
         text: "Note",
         position,
-        offsetY: nextNoteOffset()
+        offsetY: 0,
+        anchorIndex: selectedMsgIndex >= 0 ? selectedMsgIndex : (state.messages.length ? state.messages.length - 1 : null)
       });
       state.selection = { kind: "note", id };
       render();
@@ -3513,7 +3521,7 @@
         if (!note) return;
         const participantIndex = clamp(Math.round((point.x - layout.xStart) / layout.spacing), 0, state.participants.length - 1);
         note.targetId = state.participants[participantIndex].id;
-        note.offsetY = clamp(Math.round(point.y - noteBaseY()), -220, 2200);
+        note.offsetY = clamp(Math.round(point.y - noteAnchorBaseY(note)), -220, 2200);
         state.selection = { kind: "note", id: drag.id };
       } else if (drag.kind === "fragment") {
         const fragment = state.fragments.find((f) => f.id === drag.id);
@@ -3645,7 +3653,7 @@
     function serializePlantUml() {
       const lines = ["@startuml"];
       state.participants.forEach((participant) => {
-        lines.push(`${participant.type} ${participant.name}`);
+        lines.push(`${participant.type} ${plantToken(participant.name)}`);
       });
       lines.push("");
 
@@ -3669,7 +3677,7 @@
 
         lines.push(
           indent(indentLevel) +
-          `${findParticipantName(message.fromId)} ${arrowFromType(message.type)} ${findParticipantName(message.toId)}: ${message.label}`
+          `${plantToken(findParticipantName(message.fromId))} ${arrowFromType(message.type)} ${plantToken(findParticipantName(message.toId))}: ${message.label}`
         );
         if (message.dotted || (message.color && message.color.toLowerCase() !== "#0f172a")) {
           const colorValue = normalizeColor(message.color || "#0f172a");
@@ -3688,7 +3696,10 @@
       if (state.notes.length) {
         lines.push("");
         state.notes.forEach((note) => {
-          lines.push(`note ${note.position} ${findParticipantName(note.targetId)}: ${note.text}`);
+          lines.push(`note ${note.position} ${plantToken(findParticipantName(note.targetId))}: ${note.text}`);
+          if (Number.isFinite(Number(note.anchorIndex))) {
+            lines.push(`  ' note-anchor ${Math.max(0, Math.round(Number(note.anchorIndex)))}`);
+          }
           const offset = Math.round(normalizedNoteOffset(note, state.notes.indexOf(note)));
           if (offset !== 0) {
             lines.push(`  ' note-offset ${offset}`);
@@ -3738,25 +3749,43 @@
           return;
         }
 
+        const noteAnchorMatch = line.match(/^'\s*note-anchor\s+(-?\d+)$/i);
+        if (noteAnchorMatch) {
+          if (lastNote) {
+            const raw = Number(noteAnchorMatch[1]);
+            lastNote.anchorIndex = Number.isFinite(raw) ? Math.max(0, raw) : null;
+          }
+          return;
+        }
+
         const noteRowMatch = line.match(/^'\s*note-row\s+(\d+)$/i);
         if (noteRowMatch) {
           if (lastNote) lastNote.offsetY = clamp(Number(noteRowMatch[1]) * 58, -220, 2200);
           return;
         }
 
-        const participantMatch = line.match(/^(actor|boundary|control|entity|database)\s+("?[\w .-]+"?)$/i);
-        if (participantMatch) {
-          const type = participantMatch[1].toLowerCase();
-          const name = participantMatch[2].replace(/"/g, "");
-          if (!names.has(name)) {
+        const participantDecl = parseParticipantDeclarationLine(line);
+        if (participantDecl) {
+          const preferredName = participantDecl.displayName || participantDecl.codeName;
+          const existingId = names.get(participantDecl.codeName) || names.get(preferredName);
+          if (!existingId) {
             const id = "p" + p++;
-            participants.push({ id, name, type });
-            names.set(name, id);
+            participants.push({ id, name: preferredName, type: participantDecl.type });
+            names.set(participantDecl.codeName, id);
+            names.set(preferredName, id);
+          } else {
+            const existing = participants.find((item) => item.id === existingId);
+            if (existing) {
+              if (participantDecl.type !== "entity" || existing.type === "entity") existing.type = participantDecl.type;
+              existing.name = preferredName || existing.name;
+            }
+            names.set(participantDecl.codeName, existingId);
+            names.set(preferredName, existingId);
           }
           return;
         }
 
-        const fragmentStartMatch = line.match(/^(loop|alt|opt|par)\s*(.*)$/i);
+        const fragmentStartMatch = line.match(/^(loop|alt|opt|par)\b\s*(.*)$/i);
         if (fragmentStartMatch) {
           const id = "f" + f++;
           const kind = fragmentStartMatch[1].toLowerCase();
@@ -3774,18 +3803,18 @@
           return;
         }
 
-        const messageMatch = line.match(/^("?[\w .-]+"?)\s*([-\.<>{}x]+)\s*("?[\w .-]+"?)\s*:? ?(.*)$/);
-        if (messageMatch) {
-          const fromName = messageMatch[1].replace(/"/g, "");
-          const toName = messageMatch[3].replace(/"/g, "");
+        const parsedMessage = parseMessageLine(line);
+        if (parsedMessage) {
+          const fromName = parsedMessage.from;
+          const toName = parsedMessage.to;
           const fromId = ensureParticipant(fromName, participants, names, () => "p" + p++);
           const toId = ensureParticipant(toName, participants, names, () => "p" + p++);
           messages.push({
             id: "m" + m++,
             fromId,
             toId,
-            label: messageMatch[4] || "",
-            type: typeFromArrow(messageMatch[2]),
+            label: parsedMessage.label || "",
+            type: typeFromArrow(parsedMessage.arrow),
             color: "#0f172a",
             dotted: false
           });
@@ -3803,7 +3832,25 @@
             targetId,
             text: noteMatch[3] || "",
             position: noteMatch[1].toLowerCase(),
-            offsetY: notes.length * 58
+            offsetY: 0,
+            anchorIndex: lastMessage ? Math.max(0, messages.length - 1) : null
+          });
+          lastNote = notes[notes.length - 1];
+          lastMessage = null;
+          return;
+        }
+
+        const floatingNoteMatch = line.match(/^note\s+(left|right)\s*:\s*(.*)$/i);
+        if (floatingNoteMatch) {
+          const fallbackTargetId = lastMessage?.toId || lastMessage?.fromId || participants[0]?.id || "";
+          if (!fallbackTargetId) return;
+          notes.push({
+            id: "n" + n++,
+            targetId: fallbackTargetId,
+            text: floatingNoteMatch[2] || "",
+            position: floatingNoteMatch[1].toLowerCase(),
+            offsetY: 0,
+            anchorIndex: lastMessage ? Math.max(0, messages.length - 1) : null
           });
           lastNote = notes[notes.length - 1];
           lastMessage = null;
@@ -3836,14 +3883,14 @@
     function selectionFromLine(line) {
       if (!line) return null;
 
-      const participantMatch = line.match(/^(actor|boundary|control|entity|database)\s+("?[\w .-]+"?)$/i);
-      if (participantMatch) {
-        const name = participantMatch[2].replace(/"/g, "");
+      const participantDecl = parseParticipantDeclarationLine(line);
+      if (participantDecl) {
+        const name = participantDecl.displayName || participantDecl.codeName;
         const item = state.participants.find((p) => p.name === name);
         if (item) return { kind: "participant", id: item.id };
       }
 
-      const fragmentMatch = line.match(/^(loop|alt|opt|par)\s*(.*)$/i);
+      const fragmentMatch = line.match(/^(loop|alt|opt|par)\b\s*(.*)$/i);
       if (fragmentMatch) {
         const kind = fragmentMatch[1].toLowerCase();
         const label = fragmentMatch[2] || "";
@@ -3851,10 +3898,10 @@
         if (item) return { kind: "fragment", id: item.id };
       }
 
-      const messageMatch = line.match(/^("?[\w .-]+"?)\s*([-\.<>{}x]+)\s*("?[\w .-]+"?)\s*:? ?(.*)$/);
-      if (messageMatch) {
-        const fromName = messageMatch[1].replace(/"/g, "");
-        const toName = messageMatch[3].replace(/"/g, "");
+      const parsedMessage = parseMessageLine(line);
+      if (parsedMessage) {
+        const fromName = parsedMessage.from;
+        const toName = parsedMessage.to;
         const item = state.messages.find((m) => {
           return findParticipantName(m.fromId) === fromName && findParticipantName(m.toId) === toName;
         });
@@ -3955,6 +4002,67 @@
       return id;
     }
 
+    function parseParticipantDeclarationLine(line) {
+      const match = line.match(/^(participant|actor|boundary|control|entity|database)\s+(.+)$/i);
+      if (!match) return null;
+
+      const keyword = match[1].toLowerCase();
+      const rest = match[2].trim();
+      const declMatch = rest.match(/^("[^"]+"|[\w.-]+)(?:\s+as\s+("[^"]+"|[\w .-]+))?$/i);
+      if (!declMatch) return null;
+
+      const codeName = unquotePlantToken(declMatch[1]);
+      const displayName = unquotePlantToken(declMatch[2] || declMatch[1]);
+      if (!codeName) return null;
+
+      return {
+        type: keyword === "participant" ? "entity" : keyword,
+        codeName,
+        displayName
+      };
+    }
+
+    function unquotePlantToken(value) {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      if (text.startsWith("\"") && text.endsWith("\"")) {
+        return text.slice(1, -1).replace(/\\"/g, "\"").trim();
+      }
+      return text;
+    }
+
+    function plantToken(value) {
+      const text = String(value || "").trim();
+      if (!text) return "\"\"";
+      if (/^[A-Za-z_][\w.-]*$/.test(text)) return text;
+      return "\"" + text.replace(/"/g, "\\\"") + "\"";
+    }
+
+    function parseMessageLine(line) {
+      const text = String(line || "").trim();
+      if (!text) return null;
+
+      const arrowMatch = text.match(/--x|-->|->>|->/);
+      if (!arrowMatch || arrowMatch.index == null) return null;
+
+      const arrow = arrowMatch[0];
+      const fromRaw = text.slice(0, arrowMatch.index).trim();
+      const remainder = text.slice(arrowMatch.index + arrow.length).trim();
+      if (!fromRaw || !remainder) return null;
+
+      const colonIndex = remainder.indexOf(":");
+      const toRaw = (colonIndex >= 0 ? remainder.slice(0, colonIndex) : remainder).trim();
+      const label = colonIndex >= 0 ? remainder.slice(colonIndex + 1).trim() : "";
+      if (!toRaw) return null;
+
+      return {
+        from: unquotePlantToken(fromRaw),
+        arrow,
+        to: unquotePlantToken(toRaw),
+        label
+      };
+    }
+
     function kindFromId(id) {
       if (id.startsWith("p")) return "participant";
       if (id.startsWith("m")) return "message";
@@ -3972,11 +4080,19 @@
     }
 
     function noteY(note) {
-      return noteBaseY() + normalizedNoteOffset(note, state.notes.indexOf(note));
+      return noteAnchorBaseY(note) + normalizedNoteOffset(note, state.notes.indexOf(note));
     }
 
     function noteBaseY() {
       return layout.yStart + Math.max(1, state.messages.length) * layout.msgStep + 14;
+    }
+
+    function noteAnchorBaseY(note) {
+      if (Number.isFinite(Number(note?.anchorIndex)) && state.messages.length) {
+        const anchor = clamp(Number(note.anchorIndex), 0, state.messages.length - 1);
+        return messageY(anchor);
+      }
+      return noteBaseY();
     }
 
     function nextNoteOffset() {
