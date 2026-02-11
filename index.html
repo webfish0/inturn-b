@@ -53,9 +53,47 @@
       border-bottom: 1px solid #1e293b;
     }
 
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
     .title {
       font-weight: 700;
       letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+
+    .tab-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      background: #0b1326;
+    }
+
+    .tab-btn {
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+      color: #cbd5e1;
+      padding: 5px 12px;
+      line-height: 1.2;
+    }
+
+    .tab-btn:hover {
+      background: #1e293b;
+      color: #f8fafc;
+    }
+
+    .tab-btn.active {
+      background: #e2e8f0;
+      color: #0f172a;
+      border-color: #94a3b8;
     }
 
     .toolbar {
@@ -102,6 +140,109 @@
       padding: 10px;
       height: calc(100vh - 56px);
       min-height: 620px;
+    }
+
+    .ai-workbench {
+      padding: 10px;
+      height: calc(100vh - 56px);
+      min-height: 620px;
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) minmax(420px, 1fr);
+      gap: 10px;
+    }
+
+    .ai-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+      min-height: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .ai-config {
+      display: grid;
+      gap: 8px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .ai-config label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .ai-config input,
+    .ai-config select,
+    .ai-config textarea {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px;
+      background: #ffffff;
+      color: var(--ink);
+    }
+
+    .ai-model-picker {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .ai-model-picker button {
+      white-space: nowrap;
+    }
+
+    .ai-oauth-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #f8fbff;
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .ai-oauth-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .ai-source,
+    .ai-output {
+      width: 100%;
+      min-height: 200px;
+      resize: vertical;
+      border-radius: 10px;
+      border: 1px solid #1f2937;
+      background: #0a1020;
+      color: #e8eef9;
+      font-family: "SFMono-Regular", Consolas, Monaco, monospace;
+      font-size: 13px;
+      padding: 10px;
+      line-height: 1.4;
+    }
+
+    .ai-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .ai-status {
+      min-height: 18px;
+      font-size: 12px;
+      color: #0c4a6e;
+    }
+
+    .ai-status.error {
+      color: #9f1239;
     }
 
     .panel {
@@ -460,6 +601,19 @@
     }
 
     @media (max-width: 1180px) {
+      .header-left {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+
+      .tab-bar {
+        width: 100%;
+      }
+
+      .tab-btn {
+        flex: 1;
+      }
+
       main {
         grid-template-columns: 1fr;
         grid-template-rows: auto auto auto auto;
@@ -475,12 +629,24 @@
       .splitter {
         display: none;
       }
+
+      .ai-workbench {
+        height: auto;
+        min-height: calc(100vh - 56px);
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <header>
-    <div class="title">Sequence Diagram Editor</div>
+    <div class="header-left">
+      <div class="title">Sequence Diagram Editor</div>
+      <div class="tab-bar" role="tablist" aria-label="Application tabs">
+        <button id="tab-btn-editor" class="tab-btn active" type="button" role="tab" aria-selected="true">Editor</button>
+        <button id="tab-btn-ai" class="tab-btn" type="button" role="tab" aria-selected="false">AI Tooling</button>
+      </div>
+    </div>
     <div class="toolbar">
       <button id="btn-new">New</button>
       <button id="btn-export-svg">Export SVG</button>
@@ -662,6 +828,116 @@
     </section>
   </main>
 
+  <section id="ai-tab" class="ai-workbench" hidden>
+    <section class="ai-panel">
+      <h3>AI Connection</h3>
+      <div class="ai-config">
+        <label>
+          Provider
+          <select id="ai-provider">
+            <option value="openai">OpenAI</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="gemini">Gemini</option>
+            <option value="ollama">Ollama</option>
+            <option value="openai-compatible">OpenAI Compatible</option>
+          </select>
+        </label>
+        <label>
+          Authentication
+          <select id="ai-auth-type">
+            <option value="api-key">API Key</option>
+            <option value="oauth">OAuth Token</option>
+          </select>
+        </label>
+        <label>
+          Base URL
+          <input id="ai-base-url" type="text" placeholder="https://api.openai.com/v1">
+        </label>
+        <label>
+          Available Models
+          <div class="ai-model-picker">
+            <select id="ai-model-select">
+              <option value="">No models loaded</option>
+            </select>
+            <button id="btn-ai-refresh-models" type="button" class="tool-btn">Refresh</button>
+          </div>
+        </label>
+        <label>
+          Model (selected or custom)
+          <input id="ai-model" type="text" list="ai-model-suggestions" placeholder="gpt-4.1-mini">
+          <datalist id="ai-model-suggestions"></datalist>
+        </label>
+        <label id="ai-row-api-key">
+          API Key
+          <input id="ai-api-key" type="password" placeholder="sk-...">
+        </label>
+        <label id="ai-row-oauth-token" hidden>
+          OAuth Token
+          <input id="ai-oauth-token" type="password" placeholder="Bearer token">
+        </label>
+        <div id="ai-oauth-settings" class="ai-oauth-box" hidden>
+          <label>
+            OAuth Client ID
+            <input id="ai-oauth-client-id" type="text" placeholder="client-id">
+          </label>
+          <label>
+            Authorization URL
+            <input id="ai-oauth-auth-url" type="text" placeholder="https://accounts.google.com/o/oauth2/v2/auth">
+          </label>
+          <label>
+            Token URL
+            <input id="ai-oauth-token-url" type="text" placeholder="https://oauth2.googleapis.com/token">
+          </label>
+          <label>
+            OAuth Scopes
+            <input id="ai-oauth-scopes" type="text" placeholder="scope1 scope2">
+          </label>
+          <label>
+            Redirect URI
+            <input id="ai-oauth-redirect-uri" type="text">
+          </label>
+          <div class="ai-oauth-actions">
+            <button id="btn-ai-oauth-login" type="button" class="tool-btn">Authenticate OAuth</button>
+            <button id="btn-ai-oauth-clear" type="button" class="tool-btn">Clear Token</button>
+          </div>
+          <div class="hint">OAuth uses Authorization Code + PKCE in your browser and stores the bearer token only in memory.</div>
+        </div>
+        <label id="ai-row-openai-org" hidden>
+          OpenAI Organization (optional)
+          <input id="ai-openai-org" type="text" placeholder="org_...">
+        </label>
+        <label id="ai-row-openai-project" hidden>
+          OpenAI Project (optional)
+          <input id="ai-openai-project" type="text" placeholder="proj_...">
+        </label>
+        <label id="ai-row-anthropic-version" hidden>
+          Claude API Version
+          <input id="ai-anthropic-version" type="text" value="2023-06-01">
+        </label>
+        <div class="hint" id="ai-provider-hint">Use an API key from your selected provider.</div>
+      </div>
+    </section>
+
+    <section class="ai-panel">
+      <h3>Generate Diagram</h3>
+      <label class="hint" for="ai-source-text">Narrative or Logs</label>
+      <textarea id="ai-source-text" class="ai-source" placeholder="Paste logs or a narrative of the flow..."></textarea>
+      <div class="ai-actions">
+        <input id="ai-source-file" type="file" accept=".txt,.log,.json,.md,.csv">
+        <button id="btn-ai-load-file" type="button" class="tool-btn">Load File</button>
+      </div>
+      <label class="hint" for="ai-extra-instructions">Extra Instructions (optional)</label>
+      <textarea id="ai-extra-instructions" class="ai-source" style="min-height:110px" placeholder="Example: Focus on payment and retry flows; include loop and alt fragments."></textarea>
+      <div class="ai-actions">
+        <button id="btn-ai-generate" type="button" class="tool-btn">Generate Sequence Diagram</button>
+        <button id="btn-ai-use-output" type="button" class="tool-btn">Use In Editor</button>
+      </div>
+      <div id="ai-status" class="ai-status">Ready.</div>
+      <label class="hint" for="ai-output-text">Generated PlantUML</label>
+      <textarea id="ai-output-text" class="ai-output" placeholder="Generated PlantUML appears here..."></textarea>
+    </section>
+  </section>
+
   <div id="context-menu" class="context-menu" hidden>
     <button id="ctx-reverse-arrow" type="button">Reverse Direction</button>
     <label id="ctx-arrow-color-row" for="ctx-arrow-color">
@@ -680,6 +956,8 @@
     const MESSAGE_TYPES = ["sync", "async", "return", "create", "destroy"];
     const FRAGMENT_TYPES = ["loop", "alt", "opt", "par"];
     const GIT_CONFIG_KEY = "sequence-diagram-editor-git-config-v1";
+    const AI_CONFIG_KEY = "sequence-diagram-editor-ai-config-v1";
+    const AI_OAUTH_SESSION_KEY = "sequence-diagram-editor-ai-oauth-session-v1";
 
     const state = {
       participants: [],
@@ -690,6 +968,7 @@
       drag: null,
       layoutDrag: null,
       previewScale: 1,
+      activeTab: "editor",
       contextMenu: { open: false, targetKind: null, targetId: null },
       git: {
         provider: "github",
@@ -699,6 +978,21 @@
         directory: "",
         filePath: "sequence.puml",
         contentType: "plantuml"
+      },
+      ai: {
+        provider: "openai",
+        authType: "api-key",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4.1-mini",
+        openaiOrg: "",
+        openaiProject: "",
+        anthropicVersion: "2023-06-01",
+        oauthClientId: "",
+        oauthAuthUrl: "",
+        oauthTokenUrl: "",
+        oauthScopes: "",
+        oauthRedirectUri: "",
+        availableModels: []
       }
     };
 
@@ -715,6 +1009,9 @@
     const textArea = document.getElementById("uml-text");
     const statusEl = document.getElementById("status");
     const mainLayout = document.getElementById("main-layout");
+    const aiTab = document.getElementById("ai-tab");
+    const tabBtnEditor = document.getElementById("tab-btn-editor");
+    const tabBtnAi = document.getElementById("tab-btn-ai");
     const splitLeft = document.getElementById("split-left");
     const splitRight = document.getElementById("split-right");
     const splitHorizontal = document.getElementById("split-horizontal");
@@ -766,18 +1063,58 @@
     const btnGitSave = document.getElementById("btn-git-save");
     const gitStatus = document.getElementById("git-status");
 
+    const aiProvider = document.getElementById("ai-provider");
+    const aiAuthType = document.getElementById("ai-auth-type");
+    const aiBaseUrl = document.getElementById("ai-base-url");
+    const aiModelSelect = document.getElementById("ai-model-select");
+    const btnAiRefreshModels = document.getElementById("btn-ai-refresh-models");
+    const aiModel = document.getElementById("ai-model");
+    const aiModelSuggestions = document.getElementById("ai-model-suggestions");
+    const aiApiKey = document.getElementById("ai-api-key");
+    const aiOauthToken = document.getElementById("ai-oauth-token");
+    const aiOauthSettings = document.getElementById("ai-oauth-settings");
+    const aiOauthClientId = document.getElementById("ai-oauth-client-id");
+    const aiOauthAuthUrl = document.getElementById("ai-oauth-auth-url");
+    const aiOauthTokenUrl = document.getElementById("ai-oauth-token-url");
+    const aiOauthScopes = document.getElementById("ai-oauth-scopes");
+    const aiOauthRedirectUri = document.getElementById("ai-oauth-redirect-uri");
+    const btnAiOauthLogin = document.getElementById("btn-ai-oauth-login");
+    const btnAiOauthClear = document.getElementById("btn-ai-oauth-clear");
+    const aiOpenaiOrg = document.getElementById("ai-openai-org");
+    const aiOpenaiProject = document.getElementById("ai-openai-project");
+    const aiAnthropicVersion = document.getElementById("ai-anthropic-version");
+    const aiProviderHint = document.getElementById("ai-provider-hint");
+    const aiSourceText = document.getElementById("ai-source-text");
+    const aiExtraInstructions = document.getElementById("ai-extra-instructions");
+    const aiOutputText = document.getElementById("ai-output-text");
+    const aiSourceFile = document.getElementById("ai-source-file");
+    const btnAiLoadFile = document.getElementById("btn-ai-load-file");
+    const btnAiGenerate = document.getElementById("btn-ai-generate");
+    const btnAiUseOutput = document.getElementById("btn-ai-use-output");
+    const aiStatus = document.getElementById("ai-status");
+    const aiRowApiKey = document.getElementById("ai-row-api-key");
+    const aiRowOauthToken = document.getElementById("ai-row-oauth-token");
+    const aiRowOpenaiOrg = document.getElementById("ai-row-openai-org");
+    const aiRowOpenaiProject = document.getElementById("ai-row-openai-project");
+    const aiRowAnthropicVersion = document.getElementById("ai-row-anthropic-version");
+
     function init() {
       resetDiagram();
+      bindTabs();
       bindToolbar();
       bindToolButtons();
       bindProps();
       bindTextControls();
       bindGitControls();
       loadGitConfig();
+      bindAiControls();
+      loadAiConfig();
+      tryCompleteAiOauthRedirect();
       bindContextMenu();
       bindLayoutControls();
       bindGlobalDrag();
       applyPreviewScaleUi();
+      switchTab(state.activeTab);
       render();
     }
 
@@ -804,6 +1141,1018 @@
       state.contextMenu = { open: false, targetKind: null, targetId: null };
       closeContextMenu();
       syncTextFromModel();
+    }
+
+    function bindTabs() {
+      tabBtnEditor.addEventListener("click", () => switchTab("editor"));
+      tabBtnAi.addEventListener("click", () => switchTab("ai"));
+    }
+
+    function switchTab(tab) {
+      const next = tab === "ai" ? "ai" : "editor";
+      state.activeTab = next;
+      const isEditor = next === "editor";
+      mainLayout.hidden = !isEditor;
+      aiTab.hidden = isEditor;
+      tabBtnEditor.classList.toggle("active", isEditor);
+      tabBtnAi.classList.toggle("active", !isEditor);
+      tabBtnEditor.setAttribute("aria-selected", isEditor ? "true" : "false");
+      tabBtnAi.setAttribute("aria-selected", isEditor ? "false" : "true");
+      closeContextMenu();
+      removeInlineEditor();
+    }
+
+    function bindAiControls() {
+      aiProvider.addEventListener("change", () => {
+        const previousProvider = state.ai.provider;
+        readAiInputsToState();
+        if (!state.ai.baseUrl || state.ai.baseUrl === defaultAiBaseUrl(previousProvider)) {
+          state.ai.baseUrl = defaultAiBaseUrl(state.ai.provider);
+        }
+        if (!state.ai.model || state.ai.model === defaultAiModel(previousProvider)) {
+          state.ai.model = defaultAiModel(state.ai.provider);
+        }
+        applyAiOauthDefaultsForProvider(true);
+        syncAiInputsFromState();
+        saveAiConfig();
+        refreshAvailableModels({ silent: true });
+      });
+
+      aiAuthType.addEventListener("change", () => {
+        readAiInputsToState();
+        applyAiOauthDefaultsForProvider(false);
+        refreshAiProviderUi();
+        saveAiConfig();
+        refreshAvailableModels({ silent: true });
+      });
+
+      [aiModel, aiOpenaiOrg, aiOpenaiProject, aiAnthropicVersion, aiOauthClientId, aiOauthAuthUrl, aiOauthTokenUrl, aiOauthScopes, aiOauthRedirectUri].forEach((node) => {
+        node.addEventListener("input", () => {
+          readAiInputsToState();
+          saveAiConfig();
+        });
+        node.addEventListener("change", () => {
+          readAiInputsToState();
+          saveAiConfig();
+        });
+      });
+
+      aiBaseUrl.addEventListener("input", () => {
+        readAiInputsToState();
+        saveAiConfig();
+      });
+      aiBaseUrl.addEventListener("change", () => {
+        readAiInputsToState();
+        saveAiConfig();
+        refreshAvailableModels({ silent: true });
+      });
+
+      aiModelSelect.addEventListener("change", () => {
+        const selected = aiModelSelect.value;
+        if (!selected) return;
+        aiModel.value = selected;
+        readAiInputsToState();
+        saveAiConfig();
+      });
+
+      btnAiRefreshModels.addEventListener("click", async () => {
+        await refreshAvailableModels({ silent: false });
+      });
+
+      [aiApiKey, aiOauthToken].forEach((node) => {
+        node.addEventListener("change", () => {
+          refreshAvailableModels({ silent: true });
+        });
+      });
+
+      btnAiLoadFile.addEventListener("click", async () => {
+        try {
+          if (!aiSourceFile.files || !aiSourceFile.files[0]) throw new Error("Select a log/text file first.");
+          const file = aiSourceFile.files[0];
+          const text = await file.text();
+          aiSourceText.value = text;
+          setAiStatus("Loaded " + file.name + ".");
+        } catch (error) {
+          setAiStatus(error.message || "Failed to load file.", true);
+        }
+      });
+
+      btnAiGenerate.addEventListener("click", async () => {
+        try {
+          setAiBusy(true);
+          readAiInputsToState();
+          const source = aiSourceText.value.trim();
+          if (!source) throw new Error("Provide narrative/log input before generating.");
+          setAiStatus("Generating diagram...");
+          const prompt = buildAiGenerationPrompt(source, aiExtraInstructions.value.trim());
+          const raw = await generateAiCompletion(prompt);
+          const plantUml = extractPlantUmlFromResponse(raw);
+          aiOutputText.value = plantUml;
+          setAiStatus("Sequence diagram generated.");
+          saveAiConfig();
+        } catch (error) {
+          setAiStatus(error.message || "Generation failed.", true);
+        } finally {
+          setAiBusy(false);
+        }
+      });
+
+      btnAiUseOutput.addEventListener("click", () => {
+        try {
+          const output = aiOutputText.value.trim();
+          if (!output) throw new Error("No generated output to apply.");
+          applyPlantUmlText(output);
+          switchTab("editor");
+          setAiStatus("Applied generated diagram to editor.");
+        } catch (error) {
+          setAiStatus(error.message || "Could not apply output.", true);
+        }
+      });
+
+      btnAiOauthLogin.addEventListener("click", async () => {
+        try {
+          setAiBusy(true);
+          readAiInputsToState();
+          await startAiOauthFlow();
+        } catch (error) {
+          setAiStatus(error.message || "OAuth authentication failed.", true);
+          setAiBusy(false);
+        }
+      });
+
+      btnAiOauthClear.addEventListener("click", () => {
+        aiOauthToken.value = "";
+        try {
+          sessionStorage.removeItem(AI_OAUTH_SESSION_KEY);
+        } catch (_error) {
+          // ignore session storage errors
+        }
+        setAiStatus("OAuth token cleared.");
+      });
+    }
+
+    function loadAiConfig() {
+      try {
+        const raw = localStorage.getItem(AI_CONFIG_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            state.ai.provider = parsed.provider || state.ai.provider;
+            state.ai.authType = parsed.authType || state.ai.authType;
+            state.ai.baseUrl = parsed.baseUrl || defaultAiBaseUrl(state.ai.provider);
+            state.ai.model = parsed.model || defaultAiModel(state.ai.provider);
+            state.ai.openaiOrg = parsed.openaiOrg || "";
+            state.ai.openaiProject = parsed.openaiProject || "";
+            state.ai.anthropicVersion = parsed.anthropicVersion || state.ai.anthropicVersion;
+            state.ai.oauthClientId = parsed.oauthClientId || "";
+            state.ai.oauthAuthUrl = parsed.oauthAuthUrl || "";
+            state.ai.oauthTokenUrl = parsed.oauthTokenUrl || "";
+            state.ai.oauthScopes = parsed.oauthScopes || "";
+            state.ai.oauthRedirectUri = parsed.oauthRedirectUri || "";
+            state.ai.availableModels = [];
+          }
+        }
+      } catch (_error) {
+        // ignore malformed local data
+      }
+      applyAiOauthDefaultsForProvider(false);
+      syncAiInputsFromState();
+      refreshAvailableModels({ silent: true });
+    }
+
+    function saveAiConfig() {
+      const safe = {
+        provider: state.ai.provider,
+        authType: state.ai.authType,
+        baseUrl: state.ai.baseUrl,
+        model: state.ai.model,
+        openaiOrg: state.ai.openaiOrg,
+        openaiProject: state.ai.openaiProject,
+        anthropicVersion: state.ai.anthropicVersion,
+        oauthClientId: state.ai.oauthClientId,
+        oauthAuthUrl: state.ai.oauthAuthUrl,
+        oauthTokenUrl: state.ai.oauthTokenUrl,
+        oauthScopes: state.ai.oauthScopes,
+        oauthRedirectUri: state.ai.oauthRedirectUri
+      };
+      try {
+        localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(safe));
+      } catch (_error) {
+        // ignore local storage failures
+      }
+    }
+
+    function readAiInputsToState() {
+      state.ai.provider = aiProvider.value || "openai";
+      state.ai.authType = aiAuthType.value || "api-key";
+      state.ai.baseUrl = (aiBaseUrl.value || defaultAiBaseUrl(state.ai.provider)).trim();
+      state.ai.model = (aiModel.value || defaultAiModel(state.ai.provider)).trim();
+      state.ai.openaiOrg = (aiOpenaiOrg.value || "").trim();
+      state.ai.openaiProject = (aiOpenaiProject.value || "").trim();
+      state.ai.anthropicVersion = (aiAnthropicVersion.value || "2023-06-01").trim();
+      state.ai.oauthClientId = (aiOauthClientId.value || "").trim();
+      state.ai.oauthAuthUrl = (aiOauthAuthUrl.value || "").trim();
+      state.ai.oauthTokenUrl = (aiOauthTokenUrl.value || "").trim();
+      state.ai.oauthScopes = (aiOauthScopes.value || "").trim();
+      state.ai.oauthRedirectUri = (aiOauthRedirectUri.value || "").trim();
+    }
+
+    function syncAiInputsFromState() {
+      aiProvider.value = state.ai.provider;
+      aiAuthType.value = state.ai.authType;
+      aiBaseUrl.value = state.ai.baseUrl || defaultAiBaseUrl(state.ai.provider);
+      aiModel.value = state.ai.model || defaultAiModel(state.ai.provider);
+      aiOpenaiOrg.value = state.ai.openaiOrg || "";
+      aiOpenaiProject.value = state.ai.openaiProject || "";
+      aiAnthropicVersion.value = state.ai.anthropicVersion || "2023-06-01";
+      aiOauthClientId.value = state.ai.oauthClientId || "";
+      aiOauthAuthUrl.value = state.ai.oauthAuthUrl || "";
+      aiOauthTokenUrl.value = state.ai.oauthTokenUrl || "";
+      aiOauthScopes.value = state.ai.oauthScopes || "";
+      aiOauthRedirectUri.value = state.ai.oauthRedirectUri || "";
+      refreshAiProviderUi();
+    }
+
+    function refreshAiProviderUi() {
+      const provider = state.ai.provider;
+      const authType = state.ai.authType;
+      const isOllama = provider === "ollama";
+      aiAuthType.disabled = isOllama;
+
+      aiRowApiKey.hidden = isOllama || authType !== "api-key";
+      aiRowOauthToken.hidden = isOllama || authType !== "oauth";
+      aiOauthSettings.hidden = isOllama || authType !== "oauth";
+      const isOpenAiFamily = provider === "openai" || provider === "openai-compatible";
+      aiRowOpenaiOrg.hidden = !isOpenAiFamily;
+      aiRowOpenaiProject.hidden = !isOpenAiFamily;
+      aiRowAnthropicVersion.hidden = provider !== "claude";
+
+      aiBaseUrl.placeholder = defaultAiBaseUrl(provider);
+      if (!aiBaseUrl.value.trim()) aiBaseUrl.value = defaultAiBaseUrl(provider);
+
+      const modelDefaults = aiModelSuggestionsForProvider(provider);
+      aiModelSuggestions.innerHTML = "";
+      modelDefaults.forEach((modelName) => {
+        const option = document.createElement("option");
+        option.value = modelName;
+        aiModelSuggestions.appendChild(option);
+      });
+      aiModel.placeholder = defaultAiModel(provider);
+      if (!aiModel.value.trim()) aiModel.value = defaultAiModel(provider);
+
+      if (provider === "ollama") {
+        aiProviderHint.textContent = "Ollama uses local endpoints only. API key and OAuth token are not required. If opened via file://, run this app from http://localhost to avoid Origin=null CORS blocks.";
+      } else if (provider === "gemini") {
+        aiProviderHint.textContent = authType === "oauth"
+          ? "Gemini OAuth uses Google authorization and token endpoints with PKCE."
+          : "Gemini API key uses the Google Generative Language endpoint.";
+      } else if (provider === "claude") {
+        aiProviderHint.textContent = authType === "oauth"
+          ? "Claude OAuth depends on your enterprise gateway. Configure auth/token URLs and client ID."
+          : "Claude uses Anthropic Messages API. Set model and API version; return type should be PlantUML text.";
+      } else if (provider === "openai-compatible") {
+        aiProviderHint.textContent = authType === "oauth"
+          ? "OpenAI-compatible OAuth works when your endpoint supports browser PKCE token exchange."
+          : "For OpenAI-compatible providers, set the correct base URL and model name from your endpoint.";
+      } else {
+        aiProviderHint.textContent = authType === "oauth"
+          ? "OpenAI OAuth is provider-dependent; configure auth/token URLs from your IdP or gateway."
+          : "OpenAI Chat Completions endpoint will be used for sequence generation.";
+      }
+
+      updateAiModelSelectOptions();
+    }
+
+    function setAiBusy(isBusy) {
+      btnAiGenerate.disabled = isBusy;
+      btnAiUseOutput.disabled = isBusy;
+      btnAiLoadFile.disabled = isBusy;
+      btnAiRefreshModels.disabled = isBusy;
+      btnAiOauthLogin.disabled = isBusy;
+      btnAiOauthClear.disabled = isBusy;
+    }
+
+    function setAiStatus(message, isError) {
+      aiStatus.textContent = message;
+      aiStatus.classList.toggle("error", Boolean(isError));
+    }
+
+    function defaultAiBaseUrl(provider) {
+      if (provider === "claude") return "https://api.anthropic.com/v1";
+      if (provider === "gemini") return "https://generativelanguage.googleapis.com/v1beta";
+      if (provider === "ollama") return "http://localhost:11434";
+      if (provider === "openai-compatible") return "https://api.openai.com/v1";
+      return "https://api.openai.com/v1";
+    }
+
+    function defaultAiModel(provider) {
+      if (provider === "claude") return "claude-3-5-sonnet-latest";
+      if (provider === "gemini") return "gemini-2.0-flash";
+      if (provider === "ollama") return "llama3.1";
+      if (provider === "openai-compatible") return "gpt-4o-mini";
+      return "gpt-4.1-mini";
+    }
+
+    function aiModelSuggestionsForProvider(provider) {
+      if (provider === "claude") return ["claude-3-5-sonnet-latest", "claude-3-7-sonnet-latest", "claude-3-opus-latest"];
+      if (provider === "gemini") return ["gemini-2.0-flash", "gemini-2.0-pro-exp", "gemini-1.5-pro"];
+      if (provider === "ollama") return ["llama3.1", "qwen2.5-coder", "mistral-nemo"];
+      if (provider === "openai-compatible") return ["gpt-4o-mini", "gpt-4.1-mini", "custom-model"];
+      return ["gpt-4.1-mini", "gpt-4o-mini", "o4-mini"];
+    }
+
+    function updateAiModelSelectOptions() {
+      const currentModel = (aiModel.value || state.ai.model || "").trim();
+      const models = Array.isArray(state.ai.availableModels) ? state.ai.availableModels : [];
+      aiModelSelect.innerHTML = "";
+
+      if (!models.length) {
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "No models loaded";
+        aiModelSelect.appendChild(emptyOption);
+        return;
+      }
+
+      models.forEach((modelId) => {
+        const option = document.createElement("option");
+        option.value = modelId;
+        option.textContent = modelId;
+        aiModelSelect.appendChild(option);
+      });
+
+      if (currentModel && !models.includes(currentModel)) {
+        const custom = document.createElement("option");
+        custom.value = currentModel;
+        custom.textContent = currentModel + " (custom)";
+        aiModelSelect.appendChild(custom);
+      }
+      const hasCurrent = Array.from(aiModelSelect.options).some((option) => option.value === currentModel);
+      aiModelSelect.value = hasCurrent ? currentModel : models[0];
+    }
+
+    async function refreshAvailableModels(options = {}) {
+      const silent = Boolean(options.silent);
+      const refreshButtonWasDisabled = btnAiRefreshModels.disabled;
+      btnAiRefreshModels.disabled = true;
+      readAiInputsToState();
+      const provider = state.ai.provider;
+      const baseUrl = state.ai.baseUrl.trim();
+      if (!baseUrl) {
+        state.ai.availableModels = [];
+        updateAiModelSelectOptions();
+        if (!silent) setAiStatus("Base URL is required to query models.", true);
+        btnAiRefreshModels.disabled = refreshButtonWasDisabled;
+        return;
+      }
+
+      const token = resolveAiAuthToken();
+      if (providerRequiresCredential(provider, state.ai.authType) && !token) {
+        state.ai.availableModels = [];
+        updateAiModelSelectOptions();
+        if (!silent) {
+          const name = state.ai.authType === "oauth" ? "OAuth token" : "API key";
+          setAiStatus(name + " is required to query models for this provider.", true);
+        }
+        btnAiRefreshModels.disabled = refreshButtonWasDisabled;
+        return;
+      }
+
+      try {
+        const models = await queryProviderModels(provider, baseUrl, token);
+        const unique = [...new Set(models.map((entry) => String(entry || "").trim()).filter(Boolean))].sort();
+        state.ai.availableModels = unique;
+        if (unique.length) {
+          if (!state.ai.model || !unique.includes(state.ai.model)) {
+            state.ai.model = unique[0];
+            aiModel.value = unique[0];
+          }
+        }
+        updateAiModelSelectOptions();
+        saveAiConfig();
+        if (!silent) setAiStatus("Loaded " + unique.length + " model(s).");
+      } catch (error) {
+        state.ai.availableModels = [];
+        updateAiModelSelectOptions();
+        if (!silent) {
+          if (provider === "ollama") {
+            setAiStatus(
+              "Could not load Ollama models. No API key/OAuth token is required. " +
+              "Base URL: " + baseUrl + ". " +
+              (error?.message || "Request failed.") + " " +
+              "If this page is opened with file://, serve it over http://localhost or allow origin via OLLAMA_ORIGINS.",
+              true
+            );
+          } else {
+            setAiStatus(error.message || "Failed to load models.", true);
+          }
+        }
+      } finally {
+        btnAiRefreshModels.disabled = refreshButtonWasDisabled;
+      }
+    }
+
+    function providerRequiresCredential(provider, authType) {
+      if (provider === "ollama") return false;
+      if (provider === "gemini") return true;
+      if (provider === "openai-compatible") return true;
+      if (provider === "openai") return true;
+      if (provider === "claude") return true;
+      return authType === "oauth" || authType === "api-key";
+    }
+
+    function resolveAiAuthToken() {
+      if (state.ai.authType === "oauth") return aiOauthToken.value.trim();
+      return aiApiKey.value.trim();
+    }
+
+    async function queryProviderModels(provider, baseUrl, token) {
+      if (provider === "claude") return queryClaudeModels(baseUrl, token);
+      if (provider === "gemini") return queryGeminiModels(baseUrl, token);
+      if (provider === "ollama") return queryOllamaModels(baseUrl);
+      return queryOpenAiModels(baseUrl, token, provider === "openai");
+    }
+
+    async function queryOpenAiModels(baseUrl, token, isOpenAi) {
+      const url = openAiModelsUrl(baseUrl, isOpenAi);
+      const headers = {
+        Accept: "application/json"
+      };
+      if (token) headers.Authorization = "Bearer " + token;
+      if (isOpenAi && state.ai.openaiOrg) headers["OpenAI-Organization"] = state.ai.openaiOrg;
+      if (isOpenAi && state.ai.openaiProject) headers["OpenAI-Project"] = state.ai.openaiProject;
+
+      const response = await requestAiJson(url, {
+        method: "GET",
+        headers
+      });
+      return (Array.isArray(response?.data) ? response.data : [])
+        .map((entry) => entry?.id)
+        .filter(Boolean);
+    }
+
+    async function queryClaudeModels(baseUrl, token) {
+      const headers = {
+        Accept: "application/json",
+        "anthropic-version": state.ai.anthropicVersion || "2023-06-01"
+      };
+      if (state.ai.authType === "oauth") {
+        if (!token) throw new Error("OAuth token is required for Claude model list.");
+        headers.Authorization = "Bearer " + token;
+      } else {
+        if (!token) throw new Error("API key is required for Claude model list.");
+        headers["x-api-key"] = token;
+      }
+      const response = await requestAiJson(trimSlash(baseUrl) + "/models", {
+        method: "GET",
+        headers
+      });
+      return (Array.isArray(response?.data) ? response.data : [])
+        .map((entry) => entry?.id)
+        .filter(Boolean);
+    }
+
+    async function queryGeminiModels(baseUrl, token) {
+      let url = trimSlash(baseUrl) + "/models";
+      const headers = {
+        Accept: "application/json"
+      };
+      if (state.ai.authType === "oauth") {
+        if (!token) throw new Error("OAuth token is required for Gemini model list.");
+        headers.Authorization = "Bearer " + token;
+      } else {
+        if (!token) throw new Error("API key is required for Gemini model list.");
+        url += "?key=" + encodeURIComponent(token);
+      }
+
+      const response = await requestAiJson(url, {
+        method: "GET",
+        headers
+      });
+      return (Array.isArray(response?.models) ? response.models : [])
+        .filter((entry) => {
+          const methods = Array.isArray(entry?.supportedGenerationMethods) ? entry.supportedGenerationMethods : [];
+          return !methods.length || methods.includes("generateContent");
+        })
+        .map((entry) => String(entry?.name || "").replace(/^models\//, ""))
+        .filter(Boolean);
+    }
+
+    async function queryOllamaModels(baseUrl) {
+      const headers = { Accept: "application/json" };
+      const endpoints = buildOllamaModelEndpoints(baseUrl);
+      const errors = [];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await requestAiJson(endpoint, {
+            method: "GET",
+            headers
+          });
+
+          const fromTags = (Array.isArray(response?.models) ? response.models : [])
+            .map((entry) => (typeof entry === "string" ? entry : entry?.name))
+            .filter(Boolean);
+          if (fromTags.length) return fromTags;
+
+          const fromOpenAiCompat = (Array.isArray(response?.data) ? response.data : [])
+            .map((entry) => entry?.id)
+            .filter(Boolean);
+          if (fromOpenAiCompat.length) return fromOpenAiCompat;
+
+          errors.push("No models returned from " + endpoint);
+        } catch (error) {
+          errors.push((error?.message || "Request failed") + " @ " + endpoint);
+        }
+      }
+
+      throw new Error(
+        "Unable to fetch Ollama models. Tried: " + endpoints.join(", ") + ". " +
+        (errors.length ? ("Last errors: " + errors.slice(0, 4).join(" | ") + ". ") : "") +
+        "No API key is required. Ensure Ollama is running and reachable."
+      );
+    }
+
+    function defaultAiOauthConfig(provider) {
+      if (provider === "gemini") {
+        return {
+          authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+          tokenUrl: "https://oauth2.googleapis.com/token",
+          scopes: "https://www.googleapis.com/auth/cloud-platform",
+          redirectUri: defaultOauthRedirectUri()
+        };
+      }
+      return {
+        authUrl: "",
+        tokenUrl: "",
+        scopes: "",
+        redirectUri: defaultOauthRedirectUri()
+      };
+    }
+
+    function applyAiOauthDefaultsForProvider(force) {
+      const defaults = defaultAiOauthConfig(state.ai.provider);
+      if (force || !state.ai.oauthAuthUrl) state.ai.oauthAuthUrl = defaults.authUrl;
+      if (force || !state.ai.oauthTokenUrl) state.ai.oauthTokenUrl = defaults.tokenUrl;
+      if (force || !state.ai.oauthScopes) state.ai.oauthScopes = defaults.scopes;
+      if (force || !state.ai.oauthRedirectUri) state.ai.oauthRedirectUri = defaults.redirectUri;
+      if (!state.ai.oauthRedirectUri) state.ai.oauthRedirectUri = defaultOauthRedirectUri();
+    }
+
+    function defaultOauthRedirectUri() {
+      const base = window.location.href.split("#")[0].split("?")[0];
+      return base;
+    }
+
+    function buildAiGenerationPrompt(sourceText, extraInstructions) {
+      const extras = extraInstructions ? ("\nExtra requirements:\n" + extraInstructions + "\n") : "";
+      return [
+        "Convert the following runtime narrative/logs into a valid PlantUML sequence diagram.",
+        "Output requirements:",
+        "- Return PlantUML only, no markdown fences, no explanation.",
+        "- Start with @startuml and end with @enduml.",
+        "- Use participants, messages, notes, and logic blocks (loop/alt/opt/par) when appropriate.",
+        "- Keep labels concise and technically accurate.",
+        extras,
+        "Input:",
+        sourceText
+      ].join("\n");
+    }
+
+    async function generateAiCompletion(prompt) {
+      if (state.ai.provider === "claude") return generateWithClaude(prompt);
+      if (state.ai.provider === "gemini") return generateWithGemini(prompt);
+      if (state.ai.provider === "ollama") return generateWithOllama(prompt);
+      return generateWithOpenAiCompatible(prompt, state.ai.provider === "openai");
+    }
+
+    async function generateWithOpenAiCompatible(prompt, isOpenAi) {
+      const url = openAiChatUrl(state.ai.baseUrl, isOpenAi);
+      const token = state.ai.authType === "oauth" ? aiOauthToken.value.trim() : aiApiKey.value.trim();
+      if (!token) throw new Error((state.ai.authType === "oauth" ? "OAuth token" : "API key") + " is required.");
+
+      const headers = {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      };
+      if (isOpenAi && state.ai.openaiOrg) headers["OpenAI-Organization"] = state.ai.openaiOrg;
+      if (isOpenAi && state.ai.openaiProject) headers["OpenAI-Project"] = state.ai.openaiProject;
+
+      const response = await requestAiJson(url, {
+        method: "POST",
+        headers,
+        body: {
+          model: state.ai.model || defaultAiModel("openai"),
+          temperature: 0.2,
+          messages: [{ role: "user", content: prompt }]
+        }
+      });
+
+      const content = response?.choices?.[0]?.message?.content;
+      if (Array.isArray(content)) {
+        return content.map((part) => part?.text || "").join("\n").trim();
+      }
+      if (typeof content === "string") return content.trim();
+      throw new Error("No model output returned.");
+    }
+
+    async function generateWithClaude(prompt) {
+      const url = trimSlash(state.ai.baseUrl || defaultAiBaseUrl("claude")) + "/messages";
+      const token = state.ai.authType === "oauth" ? aiOauthToken.value.trim() : aiApiKey.value.trim();
+      if (!token) throw new Error((state.ai.authType === "oauth" ? "OAuth token" : "API key") + " is required.");
+
+      const headers = {
+        "Content-Type": "application/json",
+        "anthropic-version": state.ai.anthropicVersion || "2023-06-01"
+      };
+      if (state.ai.authType === "oauth") {
+        headers.Authorization = "Bearer " + token;
+      } else {
+        headers["x-api-key"] = token;
+      }
+
+      const response = await requestAiJson(url, {
+        method: "POST",
+        headers,
+        body: {
+          model: state.ai.model || defaultAiModel("claude"),
+          max_tokens: 2200,
+          temperature: 0.2,
+          messages: [{ role: "user", content: prompt }]
+        }
+      });
+
+      const parts = Array.isArray(response?.content) ? response.content : [];
+      const text = parts
+        .filter((part) => part?.type === "text" && typeof part?.text === "string")
+        .map((part) => part.text)
+        .join("\n")
+        .trim();
+      if (text) return text;
+      throw new Error("No model output returned.");
+    }
+
+    async function generateWithGemini(prompt) {
+      const modelName = (state.ai.model || defaultAiModel("gemini")).replace(/^models\//, "");
+      const base = trimSlash(state.ai.baseUrl || defaultAiBaseUrl("gemini"));
+      let url = base + "/models/" + encodeURIComponent(modelName) + ":generateContent";
+      const headers = {
+        "Content-Type": "application/json"
+      };
+
+      if (state.ai.authType === "oauth") {
+        const token = aiOauthToken.value.trim();
+        if (!token) throw new Error("OAuth token is required.");
+        headers.Authorization = "Bearer " + token;
+      } else {
+        const apiKey = aiApiKey.value.trim();
+        if (!apiKey) throw new Error("API key is required.");
+        url += "?key=" + encodeURIComponent(apiKey);
+      }
+
+      const response = await requestAiJson(url, {
+        method: "POST",
+        headers,
+        body: {
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2 }
+        }
+      });
+
+      const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
+      const first = candidates[0];
+      const parts = Array.isArray(first?.content?.parts) ? first.content.parts : [];
+      const text = parts.map((part) => part?.text || "").join("\n").trim();
+      if (text) return text;
+      throw new Error("No model output returned.");
+    }
+
+    async function generateWithOllama(prompt) {
+      const base = trimSlash(state.ai.baseUrl || defaultAiBaseUrl("ollama"));
+      const url = base + "/api/chat";
+      const headers = {
+        "Content-Type": "application/json"
+      };
+
+      const response = await requestAiJson(url, {
+        method: "POST",
+        headers,
+        body: {
+          model: state.ai.model || defaultAiModel("ollama"),
+          stream: false,
+          options: { temperature: 0.2 },
+          messages: [{ role: "user", content: prompt }]
+        }
+      });
+
+      const text = (response?.message?.content || response?.response || "").trim();
+      if (text) return text;
+      throw new Error("No model output returned.");
+    }
+
+    async function requestAiJson(url, options) {
+      const response = await fetch(url, {
+        method: options.method || "GET",
+        headers: options.headers || {},
+        body: options.body ? JSON.stringify(options.body) : undefined
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        let message = response.status + " " + response.statusText;
+        if (text) {
+          try {
+            const parsed = JSON.parse(text);
+            message = parsed.error?.message || parsed.message || parsed.error || message;
+          } catch (_error) {
+            message = text.slice(0, 220);
+          }
+        }
+        throw new Error(message);
+      }
+      if (!text) return {};
+      return JSON.parse(text);
+    }
+
+    async function startAiOauthFlow() {
+      if (state.ai.authType !== "oauth") throw new Error("Switch authentication mode to OAuth first.");
+      if (state.ai.provider === "ollama") throw new Error("Ollama does not usually support OAuth login.");
+
+      const authUrl = state.ai.oauthAuthUrl.trim();
+      const tokenUrl = state.ai.oauthTokenUrl.trim();
+      const clientId = state.ai.oauthClientId.trim();
+      const scopes = state.ai.oauthScopes.trim();
+      const redirectUri = (state.ai.oauthRedirectUri || defaultOauthRedirectUri()).trim();
+
+      if (!authUrl) throw new Error("Authorization URL is required.");
+      if (!tokenUrl) throw new Error("Token URL is required.");
+      if (!clientId) throw new Error("OAuth Client ID is required.");
+
+      state.ai.oauthRedirectUri = redirectUri;
+      aiOauthRedirectUri.value = redirectUri;
+
+      const verifier = randomPkceVerifier();
+      let challengeMethod = "S256";
+      let challenge = verifier;
+      if (window.crypto && window.crypto.subtle) {
+        challenge = await pkceChallengeFromVerifier(verifier);
+      } else {
+        challengeMethod = "plain";
+      }
+      const oauthState = randomPkceVerifier(18);
+      const session = {
+        provider: state.ai.provider,
+        state: oauthState,
+        codeVerifier: verifier,
+        tokenUrl,
+        clientId,
+        redirectUri,
+        createdAt: Date.now()
+      };
+      try {
+        sessionStorage.setItem(AI_OAUTH_SESSION_KEY, JSON.stringify(session));
+      } catch (_error) {
+        // continue without cached session if storage is unavailable
+      }
+
+      const url = new URL(authUrl);
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("client_id", clientId);
+      url.searchParams.set("redirect_uri", redirectUri);
+      if (scopes) url.searchParams.set("scope", scopes);
+      url.searchParams.set("state", oauthState);
+      url.searchParams.set("code_challenge", challenge);
+      url.searchParams.set("code_challenge_method", challengeMethod);
+      if (state.ai.provider === "gemini") {
+        if (!url.searchParams.has("access_type")) url.searchParams.set("access_type", "offline");
+        if (!url.searchParams.has("prompt")) url.searchParams.set("prompt", "consent");
+      }
+
+      setAiStatus("Redirecting to OAuth login...");
+      window.location.assign(url.toString());
+    }
+
+    function tryCompleteAiOauthRedirect() {
+      const params = new URLSearchParams(window.location.search);
+      const error = params.get("error");
+      const errorDescription = params.get("error_description");
+      const code = params.get("code");
+      const stateParam = params.get("state");
+      const hasOauthParams = Boolean(error || code || stateParam);
+      if (!hasOauthParams) return;
+
+      switchTab("ai");
+      if (error) {
+        setAiStatus("OAuth failed: " + (errorDescription || error), true);
+        cleanupOauthQueryParams();
+        return;
+      }
+      if (!code || !stateParam) {
+        setAiStatus("OAuth callback is missing required parameters.", true);
+        cleanupOauthQueryParams();
+        return;
+      }
+
+      setAiBusy(true);
+      setAiStatus("Completing OAuth token exchange...");
+      exchangeAiOauthCode(code, stateParam)
+        .then(() => {
+          setAiStatus("OAuth authentication complete. Bearer token loaded.");
+        })
+        .catch((exchangeError) => {
+          setAiStatus(exchangeError.message || "OAuth token exchange failed.", true);
+        })
+        .finally(() => {
+          setAiBusy(false);
+          cleanupOauthQueryParams();
+        });
+    }
+
+    async function exchangeAiOauthCode(code, returnedState) {
+      let session = null;
+      try {
+        session = JSON.parse(sessionStorage.getItem(AI_OAUTH_SESSION_KEY) || "null");
+      } catch (_error) {
+        session = null;
+      }
+
+      if (!session) throw new Error("OAuth session not found. Start authentication again.");
+      if (session.state !== returnedState) throw new Error("OAuth state mismatch. Please retry.");
+
+      const payload = new URLSearchParams();
+      payload.set("grant_type", "authorization_code");
+      payload.set("code", code);
+      payload.set("client_id", session.clientId);
+      payload.set("redirect_uri", session.redirectUri);
+      payload.set("code_verifier", session.codeVerifier);
+
+      let responseText = "";
+      let responseJson = null;
+      let response;
+      try {
+        response = await fetch(session.tokenUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json"
+          },
+          body: payload.toString()
+        });
+        responseText = await response.text();
+        try {
+          responseJson = responseText ? JSON.parse(responseText) : {};
+        } catch (_error) {
+          responseJson = {};
+        }
+      } catch (error) {
+        throw new Error("OAuth exchange request failed. Check CORS and token endpoint settings.");
+      }
+
+      if (!response.ok) {
+        const message = responseJson?.error_description || responseJson?.error || responseJson?.message || (response.status + " " + response.statusText);
+        throw new Error("OAuth exchange failed: " + message);
+      }
+
+      const accessToken = responseJson?.access_token;
+      if (!accessToken) throw new Error("OAuth exchange succeeded but no access_token was returned.");
+
+      if (session.provider) {
+        state.ai.provider = session.provider;
+        aiProvider.value = session.provider;
+      }
+      aiOauthToken.value = accessToken;
+      state.ai.authType = "oauth";
+      aiAuthType.value = "oauth";
+      applyAiOauthDefaultsForProvider(false);
+      refreshAiProviderUi();
+      saveAiConfig();
+      refreshAvailableModels({ silent: true });
+      try {
+        sessionStorage.removeItem(AI_OAUTH_SESSION_KEY);
+      } catch (_error) {
+        // ignore session storage errors
+      }
+    }
+
+    function cleanupOauthQueryParams() {
+      const url = new URL(window.location.href);
+      ["code", "state", "error", "error_description"].forEach((key) => {
+        url.searchParams.delete(key);
+      });
+      const next = url.pathname + (url.search ? url.search : "") + (url.hash ? url.hash : "");
+      window.history.replaceState({}, document.title, next);
+    }
+
+    function randomPkceVerifier(byteLength = 32) {
+      const bytes = new Uint8Array(byteLength);
+      if (window.crypto && window.crypto.getRandomValues) {
+        window.crypto.getRandomValues(bytes);
+      } else {
+        for (let i = 0; i < byteLength; i += 1) {
+          bytes[i] = Math.floor(Math.random() * 256);
+        }
+      }
+      return base64UrlFromBytes(bytes);
+    }
+
+    async function pkceChallengeFromVerifier(verifier) {
+      const data = new TextEncoder().encode(verifier);
+      const digest = await window.crypto.subtle.digest("SHA-256", data);
+      return base64UrlFromBytes(new Uint8Array(digest));
+    }
+
+    function base64UrlFromBytes(bytes) {
+      let binary = "";
+      bytes.forEach((value) => {
+        binary += String.fromCharCode(value);
+      });
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    }
+
+    function openAiChatUrl(baseUrl, isOpenAi) {
+      const base = trimSlash(baseUrl || defaultAiBaseUrl("openai"));
+      if (base.endsWith("/chat/completions")) return base;
+      if (base.endsWith("/v1")) return base + "/chat/completions";
+      if (isOpenAi) return base + "/v1/chat/completions";
+      return base + "/chat/completions";
+    }
+
+    function openAiModelsUrl(baseUrl, isOpenAi) {
+      const base = trimSlash(baseUrl || defaultAiBaseUrl("openai"));
+      if (base.endsWith("/models")) return base;
+      if (base.endsWith("/v1")) return base + "/models";
+      if (isOpenAi) return base + "/v1/models";
+      return base + "/models";
+    }
+
+    function buildOllamaModelEndpoints(baseUrl) {
+      const base = trimSlash(baseUrl || defaultAiBaseUrl("ollama"));
+      const roots = [];
+      const addRoot = (value) => {
+        const v = trimSlash(value || "");
+        if (v && !roots.includes(v)) roots.push(v);
+      };
+
+      addRoot(base);
+      if (base.endsWith("/v1")) addRoot(base.slice(0, -3));
+      if (base.endsWith("/api")) addRoot(base.slice(0, -4));
+      if (base.endsWith("/api/tags")) addRoot(base.slice(0, -9));
+      if (base.endsWith("/v1/models")) addRoot(base.slice(0, -10));
+      try {
+        const parsed = new URL(base);
+        addRoot(parsed.origin);
+      } catch (_error) {
+        // keep manual roots only
+      }
+
+      const urls = [];
+      const addUrl = (value) => {
+        const v = trimSlash(value || "");
+        if (v && !urls.includes(v)) urls.push(v);
+      };
+      roots.forEach((root) => {
+        addUrl(root + "/api/tags");
+        addUrl(root + "/v1/models");
+      });
+      return urls;
+    }
+
+    function ollamaTagsUrl(baseUrl) {
+      const base = trimSlash(baseUrl || defaultAiBaseUrl("ollama"));
+      if (base.endsWith("/api")) return base + "/tags";
+      if (base.endsWith("/api/tags")) return base;
+      return base + "/api/tags";
+    }
+
+    function isNetworkLikeError(error) {
+      const message = String(error?.message || "").toLowerCase();
+      return message.includes("failed to fetch") || message.includes("networkerror") || message.includes("network request failed");
+    }
+
+    function extractPlantUmlFromResponse(raw) {
+      const text = String(raw || "").trim();
+      if (!text) throw new Error("Model returned empty output.");
+
+      const fenceMatches = [...text.matchAll(/```(?:plantuml|puml|uml)?\s*([\s\S]*?)```/gi)];
+      let body = text;
+      if (fenceMatches.length) {
+        const withStart = fenceMatches.find((match) => /@startuml/i.test(match[1] || ""));
+        body = (withStart ? withStart[1] : fenceMatches[0][1]) || text;
+      }
+      body = body.trim();
+      if (!/@startuml/i.test(body)) body = "@startuml\n" + body;
+      if (!/@enduml/i.test(body)) body = body + "\n@enduml";
+      return body.trim();
+    }
+
+    function applyPlantUmlText(plantUmlText) {
+      const parsed = parsePlantUml(plantUmlText);
+      state.participants = parsed.participants;
+      state.messages = parsed.messages;
+      state.notes = parsed.notes;
+      state.fragments = parsed.fragments;
+      state.selection = null;
+      textArea.value = plantUmlText;
+      render();
     }
 
     function bindToolbar() {
@@ -900,23 +2249,11 @@
 
     function bindTextControls() {
       document.getElementById("btn-format-source").addEventListener("click", () => {
-        const parsed = parsePlantUml(textArea.value);
-        state.participants = parsed.participants;
-        state.messages = parsed.messages;
-        state.notes = parsed.notes;
-        state.fragments = parsed.fragments;
-        state.selection = null;
-        render();
+        applyPlantUmlText(textArea.value);
       });
       document.getElementById("btn-sync-text").addEventListener("click", syncTextFromModel);
       document.getElementById("btn-apply-text").addEventListener("click", () => {
-        const parsed = parsePlantUml(textArea.value);
-        state.participants = parsed.participants;
-        state.messages = parsed.messages;
-        state.notes = parsed.notes;
-        state.fragments = parsed.fragments;
-        state.selection = null;
-        render();
+        applyPlantUmlText(textArea.value);
       });
       textArea.addEventListener("click", selectFromTextCaret);
       textArea.addEventListener("keyup", selectFromTextCaret);
