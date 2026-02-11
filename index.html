@@ -88,15 +88,20 @@
     }
 
     main {
+      --left-panel-width: 280px;
+      --right-panel-width: 340px;
+      --top-row-height: 62%;
       display: grid;
-      grid-template-columns: 280px 1fr 340px;
-      grid-template-rows: 1fr 250px;
+      grid-template-columns: var(--left-panel-width) 8px minmax(420px, 1fr) 8px var(--right-panel-width);
+      grid-template-rows: var(--top-row-height) 8px minmax(180px, 1fr);
       grid-template-areas:
-        "tools preview props"
-        "text text props";
+        "tools split-left preview split-right props"
+        "split-horizontal split-horizontal split-horizontal split-right props"
+        "text text text split-right props";
       gap: 10px;
       padding: 10px;
-      min-height: calc(100vh - 56px);
+      height: calc(100vh - 56px);
+      min-height: 620px;
     }
 
     .panel {
@@ -136,6 +141,45 @@
       min-height: 0;
     }
 
+    .splitter {
+      border-radius: 6px;
+      background: linear-gradient(180deg, #d9e6f6 0%, #c8d7ea 100%);
+      border: 1px solid #b8c9de;
+      position: relative;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .splitter::after {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 4px;
+      background: #eef4fb;
+    }
+
+    .splitter-v {
+      cursor: col-resize;
+      min-width: 8px;
+    }
+
+    .splitter-h {
+      cursor: row-resize;
+      min-height: 8px;
+    }
+
+    .split-left {
+      grid-area: split-left;
+    }
+
+    .split-right {
+      grid-area: split-right;
+    }
+
+    .split-horizontal {
+      grid-area: split-horizontal;
+    }
+
     h3 {
       margin: 4px 0 8px;
       color: var(--muted);
@@ -155,6 +199,20 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .preview-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #1f2937;
+    }
+
+    .preview-controls input[type="range"] {
+      width: 120px;
     }
 
     .status {
@@ -340,6 +398,17 @@
       gap: 8px;
     }
 
+    .danger-btn {
+      background: #fff1f2;
+      color: #9f1239;
+      border: 1px solid #fecdd3;
+    }
+
+    .danger-btn:hover {
+      background: #ffe4e6;
+      border-color: #fda4af;
+    }
+
     @media (max-width: 1180px) {
       main {
         grid-template-columns: 1fr;
@@ -349,6 +418,12 @@
           "preview"
           "props"
           "text";
+        height: auto;
+        min-height: calc(100vh - 56px);
+      }
+
+      .splitter {
+        display: none;
       }
     }
   </style>
@@ -364,7 +439,7 @@
     </div>
   </header>
 
-  <main>
+  <main id="main-layout">
     <section class="panel tools">
       <h3>Participants</h3>
       <div class="tool-grid">
@@ -403,15 +478,24 @@
       <div class="items" id="items-list"></div>
     </section>
 
+    <div class="splitter splitter-v split-left" id="split-left" title="Resize left panel"></div>
+
     <section class="panel preview">
       <div class="preview-head">
         <div>Preview</div>
+        <div class="preview-controls">
+          <label for="preview-scale">Scale</label>
+          <input id="preview-scale" type="range" min="50" max="200" step="10" value="100">
+          <span id="preview-scale-label">100%</span>
+        </div>
         <span class="status" id="status">Ready</span>
       </div>
       <div class="canvas-wrap" id="canvas-wrap">
         <div id="preview-canvas"></div>
       </div>
     </section>
+
+    <div class="splitter splitter-v split-right" id="split-right" title="Resize right panel"></div>
 
     <section class="panel props">
       <h3>Properties</h3>
@@ -454,14 +538,18 @@
           <input id="prop-end-index" type="number" min="1">
         </label>
       </form>
+      <button id="btn-delete-item" type="button" class="tool-btn danger-btn" hidden>Delete Selected Item</button>
       <div class="hint" id="props-hint"></div>
       <div class="hint">Double-click labels to edit in place. Drag participants/messages/notes/fragments directly in preview. Drag arrow endpoint dots to change source and destination participants. Use fragment edge dots to resize logic boxes. Right-click an arrow for reverse, color, and dotted style.</div>
     </section>
+
+    <div class="splitter splitter-h split-horizontal" id="split-horizontal" title="Resize source panel"></div>
 
     <section class="panel text">
       <h3>PlantUML</h3>
       <textarea id="uml-text"></textarea>
       <div class="text-actions">
+        <button id="btn-format-source">Format Source</button>
         <button id="btn-apply-text">Apply Text</button>
         <button id="btn-sync-text">Sync From Diagram</button>
       </div>
@@ -470,14 +558,15 @@
 
   <div id="context-menu" class="context-menu" hidden>
     <button id="ctx-reverse-arrow" type="button">Reverse Direction</button>
-    <label for="ctx-arrow-color">
+    <label id="ctx-arrow-color-row" for="ctx-arrow-color">
       Arrow Color
       <input id="ctx-arrow-color" type="color" value="#0f172a">
     </label>
-    <label for="ctx-arrow-dotted">
+    <label id="ctx-arrow-dotted-row" for="ctx-arrow-dotted">
       Dotted Arrow
       <input id="ctx-arrow-dotted" type="checkbox">
     </label>
+    <button id="ctx-delete-item" type="button" class="danger-btn">Delete Item</button>
   </div>
 
   <script>
@@ -492,7 +581,9 @@
       fragments: [],
       selection: null,
       drag: null,
-      contextMenu: { open: false, messageId: null }
+      layoutDrag: null,
+      previewScale: 1,
+      contextMenu: { open: false, targetKind: null, targetId: null }
     };
 
     const layout = {
@@ -507,10 +598,17 @@
     const itemsList = document.getElementById("items-list");
     const textArea = document.getElementById("uml-text");
     const statusEl = document.getElementById("status");
+    const mainLayout = document.getElementById("main-layout");
+    const splitLeft = document.getElementById("split-left");
+    const splitRight = document.getElementById("split-right");
+    const splitHorizontal = document.getElementById("split-horizontal");
+    const previewScale = document.getElementById("preview-scale");
+    const previewScaleLabel = document.getElementById("preview-scale-label");
 
     const propsForm = document.getElementById("props-form");
     const propsEmpty = document.getElementById("props-empty");
     const propsHint = document.getElementById("props-hint");
+    const btnDeleteItem = document.getElementById("btn-delete-item");
 
     const fieldName = document.getElementById("field-name");
     const fieldType = document.getElementById("field-type");
@@ -532,8 +630,11 @@
 
     const contextMenu = document.getElementById("context-menu");
     const ctxReverseArrow = document.getElementById("ctx-reverse-arrow");
+    const ctxArrowColorRow = document.getElementById("ctx-arrow-color-row");
+    const ctxArrowDottedRow = document.getElementById("ctx-arrow-dotted-row");
     const ctxArrowColor = document.getElementById("ctx-arrow-color");
     const ctxArrowDotted = document.getElementById("ctx-arrow-dotted");
+    const ctxDeleteItem = document.getElementById("ctx-delete-item");
 
     function init() {
       resetDiagram();
@@ -542,7 +643,9 @@
       bindProps();
       bindTextControls();
       bindContextMenu();
+      bindLayoutControls();
       bindGlobalDrag();
+      applyPreviewScaleUi();
       render();
     }
 
@@ -565,7 +668,8 @@
       ];
       state.selection = null;
       state.drag = null;
-      state.contextMenu = { open: false, messageId: null };
+      state.layoutDrag = null;
+      state.contextMenu = { open: false, targetKind: null, targetId: null };
       closeContextMenu();
       syncTextFromModel();
     }
@@ -576,7 +680,7 @@
         render();
       });
       document.getElementById("btn-export-svg").addEventListener("click", () => {
-        downloadBlob(buildSvg(), "diagram.svg", "image/svg+xml");
+        downloadBlob(buildSvg({ forExport: true }), "diagram.svg", "image/svg+xml");
       });
       document.getElementById("btn-export-png").addEventListener("click", exportPng);
       document.getElementById("btn-export-jpeg").addEventListener("click", exportJpeg);
@@ -601,6 +705,10 @@
       [propName, propType, propFrom, propTo, propPosition, propNoteRow, propStartIndex, propEndIndex].forEach((node) => {
         node.addEventListener("input", applyProps);
         node.addEventListener("change", applyProps);
+      });
+      btnDeleteItem.addEventListener("click", () => {
+        if (!state.selection) return;
+        if (deleteSelection(state.selection)) render();
       });
     }
 
@@ -639,6 +747,13 @@
         render();
       });
 
+      ctxDeleteItem.addEventListener("click", () => {
+        const target = getContextMenuTarget();
+        if (!target) return;
+        closeContextMenu();
+        if (deleteSelection(target)) render();
+      });
+
       document.addEventListener("pointerdown", (event) => {
         if (!state.contextMenu.open) return;
         if (event.button !== 0) return;
@@ -652,6 +767,15 @@
     }
 
     function bindTextControls() {
+      document.getElementById("btn-format-source").addEventListener("click", () => {
+        const parsed = parsePlantUml(textArea.value);
+        state.participants = parsed.participants;
+        state.messages = parsed.messages;
+        state.notes = parsed.notes;
+        state.fragments = parsed.fragments;
+        state.selection = null;
+        render();
+      });
       document.getElementById("btn-sync-text").addEventListener("click", syncTextFromModel);
       document.getElementById("btn-apply-text").addEventListener("click", () => {
         const parsed = parsePlantUml(textArea.value);
@@ -666,8 +790,65 @@
       textArea.addEventListener("keyup", selectFromTextCaret);
     }
 
+    function bindLayoutControls() {
+      if (previewScale) {
+        previewScale.addEventListener("input", () => {
+          state.previewScale = clamp(Number(previewScale.value) / 100, 0.5, 2);
+          applyPreviewScaleUi();
+          render();
+        });
+      }
+
+      if (splitLeft) {
+        splitLeft.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          closeContextMenu();
+          state.layoutDrag = {
+            mode: "split-left",
+            startX: event.clientX,
+            leftWidth: parseFloat(getComputedStyle(mainLayout).getPropertyValue("--left-panel-width")) || 280
+          };
+        });
+      }
+
+      if (splitRight) {
+        splitRight.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          closeContextMenu();
+          state.layoutDrag = {
+            mode: "split-right",
+            startX: event.clientX,
+            rightWidth: parseFloat(getComputedStyle(mainLayout).getPropertyValue("--right-panel-width")) || 340
+          };
+        });
+      }
+
+      if (splitHorizontal) {
+        splitHorizontal.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          closeContextMenu();
+          const layoutRect = mainLayout.getBoundingClientRect();
+          const rowValue = getComputedStyle(mainLayout).getPropertyValue("--top-row-height").trim();
+          const currentTopHeight = parseTopRowPixels(rowValue, layoutRect.height);
+          state.layoutDrag = {
+            mode: "split-horizontal",
+            startY: event.clientY,
+            topHeight: currentTopHeight,
+            layoutHeight: layoutRect.height
+          };
+        });
+      }
+    }
+
     function bindGlobalDrag() {
       window.addEventListener("pointermove", (event) => {
+        if (state.layoutDrag) {
+          applyLayoutDrag(event.clientX, event.clientY);
+          return;
+        }
         if (!state.drag) return;
         const modeText = state.drag.mode && state.drag.mode !== "move" ? " (" + state.drag.mode + ")" : "";
         statusEl.textContent = "Dragging " + state.drag.kind + modeText + "...";
@@ -676,12 +857,59 @@
       });
 
       window.addEventListener("pointerup", (event) => {
+        if (state.layoutDrag) {
+          applyLayoutDrag(event.clientX, event.clientY);
+          state.layoutDrag = null;
+          statusEl.textContent = "Rendered";
+          return;
+        }
         if (!state.drag) return;
         const drag = state.drag;
         state.drag = null;
         applyDrop(drag, event.clientX, event.clientY);
         statusEl.textContent = "Rendered";
       });
+    }
+
+    function applyLayoutDrag(clientX, clientY) {
+      if (!state.layoutDrag) return;
+      const drag = state.layoutDrag;
+      const layoutRect = mainLayout.getBoundingClientRect();
+      if (drag.mode === "split-left") {
+        const next = clamp(drag.leftWidth + (clientX - drag.startX), 210, Math.max(210, layoutRect.width * 0.45));
+        mainLayout.style.setProperty("--left-panel-width", Math.round(next) + "px");
+        statusEl.textContent = "Resizing left panel...";
+      } else if (drag.mode === "split-right") {
+        const next = clamp(drag.rightWidth - (clientX - drag.startX), 250, Math.max(250, layoutRect.width * 0.5));
+        mainLayout.style.setProperty("--right-panel-width", Math.round(next) + "px");
+        statusEl.textContent = "Resizing right panel...";
+      } else if (drag.mode === "split-horizontal") {
+        const top = clamp(drag.topHeight + (clientY - drag.startY), 260, Math.max(260, layoutRect.height - 240));
+        const percent = clamp((top / Math.max(1, layoutRect.height)) * 100, 35, 82);
+        mainLayout.style.setProperty("--top-row-height", percent.toFixed(1) + "%");
+        statusEl.textContent = "Resizing preview/source...";
+      }
+    }
+
+    function parseTopRowPixels(value, layoutHeight) {
+      if (!value) return layoutHeight * 0.62;
+      if (value.endsWith("%")) {
+        const pct = Number(value.replace("%", ""));
+        if (Number.isFinite(pct)) return layoutHeight * (pct / 100);
+      }
+      if (value.endsWith("px")) {
+        const px = Number(value.replace("px", ""));
+        if (Number.isFinite(px)) return px;
+      }
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) return numeric;
+      return layoutHeight * 0.62;
+    }
+
+    function applyPreviewScaleUi() {
+      const pct = Math.round(state.previewScale * 100);
+      if (previewScale) previewScale.value = String(pct);
+      if (previewScaleLabel) previewScaleLabel.textContent = pct + "%";
     }
 
     function addParticipant(type) {
@@ -760,12 +988,16 @@
       statusEl.textContent = "Rendered";
     }
 
-    function buildSvg() {
+    function buildSvg(options = {}) {
+      const forExport = Boolean(options.forExport);
+      const scale = forExport ? 1 : state.previewScale;
       const spacing = layout.spacing;
       const width = Math.max(680, state.participants.length * spacing + 160);
       const maxNoteOffset = state.notes.reduce((max, note, index) => Math.max(max, normalizedNoteOffset(note, index)), 0);
       const rows = Math.max(3, state.messages.length + Math.ceil(maxNoteOffset / 58) + 3);
       const height = Math.max(420, layout.yStart + rows * layout.msgStep + 60);
+      const displayWidth = Math.round(width * scale);
+      const displayHeight = Math.round(height * scale);
       const lifelineEnd = height - 50;
 
       const groups = [];
@@ -789,11 +1021,13 @@
 
       state.participants.forEach((participant, index) => {
         const x = participantX(index);
-        const stroke = participant.type === "database" ? "#8b5cf6" : "#0ea5e9";
+        const stroke = participantStroke(participant.type);
+        const icon = participantIconSvg(participant.type, -42, 22, stroke);
         groups.push(
           `<g class="svg-item" data-id="${participant.id}" data-kind="participant" transform="translate(${x},30)">` +
           `<rect class="drag-handle" data-id="${participant.id}" data-kind="participant" x="-62" y="0" width="124" height="44" rx="8" fill="#e0f2fe" stroke="${stroke}" />` +
-          `<text class="editable" data-id="${participant.id}" data-kind="participant" data-field="name" x="0" y="26" text-anchor="middle" font-size="14" fill="#0f172a">${esc(participant.name)}</text>` +
+          `<g pointer-events="none">${icon}</g>` +
+          `<text class="editable" data-id="${participant.id}" data-kind="participant" data-field="name" x="-24" y="26" text-anchor="start" font-size="14" fill="#0f172a">${esc(participant.name)}</text>` +
           `<line x1="0" y1="44" x2="0" y2="${lifelineEnd - 30}" stroke="#94a3b8" stroke-dasharray="6 4" />` +
           `</g>`
         );
@@ -833,7 +1067,7 @@
         );
       });
 
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#ffffff;border-radius:8px">
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${displayWidth}" height="${displayHeight}" viewBox="0 0 ${width} ${height}" style="background:#ffffff;border-radius:8px">
         ${svgDefs()}
         ${groups.join("")}
       </svg>`;
@@ -862,16 +1096,17 @@
       const svg = previewCanvas.querySelector("svg");
       if (!svg) return;
 
-      previewCanvas.querySelectorAll('[data-kind="message"]').forEach((node) => {
+      previewCanvas.querySelectorAll("[data-id]").forEach((node) => {
         node.addEventListener("contextmenu", (event) => {
           event.preventDefault();
-          const messageId = node.getAttribute("data-id");
-          openContextMenuForMessage(messageId, event.clientX, event.clientY);
+          event.stopPropagation();
+          const id = event.currentTarget.getAttribute("data-id");
+          const kind = event.currentTarget.getAttribute("data-kind") || kindFromId(id);
+          openContextMenuForItem(kind, id, event.clientX, event.clientY);
         });
-      });
 
-      previewCanvas.querySelectorAll("[data-id]").forEach((node) => {
         node.addEventListener("click", (event) => {
+          event.stopPropagation();
           closeContextMenu();
           const id = event.currentTarget.getAttribute("data-id");
           const kind = event.currentTarget.getAttribute("data-kind") || kindFromId(id);
@@ -942,15 +1177,24 @@
       if (!state.selection) {
         propsForm.hidden = true;
         propsEmpty.hidden = false;
+        btnDeleteItem.hidden = true;
         propsHint.textContent = "";
         return;
       }
 
       propsEmpty.hidden = true;
       propsForm.hidden = false;
+      btnDeleteItem.hidden = false;
+      btnDeleteItem.textContent = "Delete " + capitalize(state.selection.kind);
 
       const item = findBySelection(state.selection);
-      if (!item) return;
+      if (!item) {
+        propsForm.hidden = true;
+        propsEmpty.hidden = false;
+        btnDeleteItem.hidden = true;
+        propsHint.textContent = "";
+        return;
+      }
 
       setField(fieldName, false);
       setField(fieldType, false);
@@ -1072,20 +1316,31 @@
       if (existing) existing.remove();
     }
 
-    function openContextMenuForMessage(messageId, clientX, clientY) {
-      const message = state.messages.find((m) => m.id === messageId);
-      if (!message) return;
+    function openContextMenuForItem(kind, id, clientX, clientY) {
+      const target = findBySelection({ kind, id });
+      if (!target) return;
 
       removeInlineEditor();
+      state.selection = { kind, id };
+      refreshSelectionUi();
       state.contextMenu.open = true;
-      state.contextMenu.messageId = messageId;
+      state.contextMenu.targetKind = kind;
+      state.contextMenu.targetId = id;
 
-      ctxArrowColor.value = normalizeColor(message.color || "#0f172a");
-      ctxArrowDotted.checked = Boolean(message.dotted);
+      const isMessage = kind === "message";
+      ctxReverseArrow.hidden = !isMessage;
+      ctxArrowColorRow.hidden = !isMessage;
+      ctxArrowDottedRow.hidden = !isMessage;
+
+      if (isMessage) {
+        const message = target;
+        ctxArrowColor.value = normalizeColor(message.color || "#0f172a");
+        ctxArrowDotted.checked = Boolean(message.dotted);
+      }
 
       contextMenu.hidden = false;
       const width = 220;
-      const height = 132;
+      const height = isMessage ? 170 : 54;
       const x = Math.max(6, Math.min(window.innerWidth - width - 6, clientX));
       const y = Math.max(6, Math.min(window.innerHeight - height - 6, clientY));
       contextMenu.style.left = x + "px";
@@ -1094,13 +1349,85 @@
 
     function closeContextMenu() {
       state.contextMenu.open = false;
-      state.contextMenu.messageId = null;
+      state.contextMenu.targetKind = null;
+      state.contextMenu.targetId = null;
       contextMenu.hidden = true;
     }
 
+    function getContextMenuTarget() {
+      if (!state.contextMenu.open || !state.contextMenu.targetKind || !state.contextMenu.targetId) return null;
+      const found = findBySelection({ kind: state.contextMenu.targetKind, id: state.contextMenu.targetId });
+      if (!found) return null;
+      return { kind: state.contextMenu.targetKind, id: state.contextMenu.targetId };
+    }
+
     function getContextMenuMessage() {
-      if (!state.contextMenu.open || !state.contextMenu.messageId) return null;
-      return state.messages.find((m) => m.id === state.contextMenu.messageId) || null;
+      const target = getContextMenuTarget();
+      if (!target || target.kind !== "message") return null;
+      return state.messages.find((m) => m.id === target.id) || null;
+    }
+
+    function deleteSelection(selection) {
+      if (!selection) return false;
+      if (selection.kind === "participant") {
+        const participantIndex = state.participants.findIndex((entry) => entry.id === selection.id);
+        if (participantIndex < 0) return false;
+
+        const messageIndexes = [];
+        state.messages.forEach((message, index) => {
+          if (message.fromId === selection.id || message.toId === selection.id) messageIndexes.push(index);
+        });
+        messageIndexes.sort((a, b) => b - a).forEach((index) => deleteMessageByIndex(index));
+
+        state.participants.splice(participantIndex, 1);
+        state.notes = state.notes.filter((note) => note.targetId !== selection.id);
+      } else if (selection.kind === "message") {
+        const messageIndex = state.messages.findIndex((entry) => entry.id === selection.id);
+        if (messageIndex < 0) return false;
+        deleteMessageByIndex(messageIndex);
+      } else if (selection.kind === "note") {
+        const nextNotes = state.notes.filter((entry) => entry.id !== selection.id);
+        if (nextNotes.length === state.notes.length) return false;
+        state.notes = nextNotes;
+      } else if (selection.kind === "fragment") {
+        const nextFragments = state.fragments.filter((entry) => entry.id !== selection.id);
+        if (nextFragments.length === state.fragments.length) return false;
+        state.fragments = nextFragments;
+      } else {
+        return false;
+      }
+
+      closeContextMenu();
+      state.selection = null;
+      return true;
+    }
+
+    function deleteMessageByIndex(messageIndex) {
+      if (messageIndex < 0 || messageIndex >= state.messages.length) return;
+      state.messages.splice(messageIndex, 1);
+      normalizeFragmentsAfterMessageDelete(messageIndex);
+    }
+
+    function normalizeFragmentsAfterMessageDelete(messageIndex) {
+      if (!state.fragments.length) return;
+      const maxIndex = state.messages.length - 1;
+      if (maxIndex < 0) {
+        state.fragments = [];
+        return;
+      }
+
+      state.fragments = state.fragments.filter((fragment) => {
+        if (messageIndex < fragment.startIndex) {
+          fragment.startIndex -= 1;
+          fragment.endIndex -= 1;
+        } else if (messageIndex <= fragment.endIndex) {
+          fragment.endIndex -= 1;
+        }
+
+        fragment.startIndex = clamp(fragment.startIndex, 0, maxIndex);
+        fragment.endIndex = clamp(fragment.endIndex, fragment.startIndex, maxIndex);
+        return fragment.endIndex >= fragment.startIndex;
+      });
     }
 
     function applyDrop(drag, clientX, clientY) {
@@ -1281,6 +1608,7 @@
       state.participants.forEach((participant) => {
         lines.push(`${participant.type} ${participant.name}`);
       });
+      lines.push("");
 
       const opensByIndex = new Map();
       const closesByIndex = new Map();
@@ -1291,32 +1619,43 @@
         closesByIndex.get(fragment.endIndex).push(fragment);
       });
 
+      let indentLevel = 0;
       state.messages.forEach((message, index) => {
         const opens = opensByIndex.get(index) || [];
         opens.sort((a, b) => (b.endIndex - b.startIndex) - (a.endIndex - a.startIndex));
         opens.forEach((fragment) => {
-          lines.push(`${fragment.kind} ${fragment.label}`.trim());
+          lines.push(indent(indentLevel) + `${fragment.kind} ${fragment.label}`.trim());
+          indentLevel += 1;
         });
 
-        lines.push(`${findParticipantName(message.fromId)} ${arrowFromType(message.type)} ${findParticipantName(message.toId)}: ${message.label}`);
+        lines.push(
+          indent(indentLevel) +
+          `${findParticipantName(message.fromId)} ${arrowFromType(message.type)} ${findParticipantName(message.toId)}: ${message.label}`
+        );
         if (message.dotted || (message.color && message.color.toLowerCase() !== "#0f172a")) {
           const colorValue = normalizeColor(message.color || "#0f172a");
           const dottedValue = message.dotted ? "1" : "0";
-          lines.push(`' style color=${colorValue} dotted=${dottedValue}`);
+          lines.push(indent(indentLevel) + `' style color=${colorValue} dotted=${dottedValue}`);
         }
 
         const closes = closesByIndex.get(index) || [];
         closes.sort((a, b) => (a.endIndex - a.startIndex) - (b.endIndex - b.startIndex));
-        closes.forEach(() => lines.push("end"));
+        closes.forEach(() => {
+          indentLevel = Math.max(0, indentLevel - 1);
+          lines.push(indent(indentLevel) + "end");
+        });
       });
 
-      state.notes.forEach((note) => {
-        lines.push(`note ${note.position} ${findParticipantName(note.targetId)}: ${note.text}`);
-        const offset = Math.round(normalizedNoteOffset(note, state.notes.indexOf(note)));
-        if (offset !== 0) {
-          lines.push(`' note-offset ${offset}`);
-        }
-      });
+      if (state.notes.length) {
+        lines.push("");
+        state.notes.forEach((note) => {
+          lines.push(`note ${note.position} ${findParticipantName(note.targetId)}: ${note.text}`);
+          const offset = Math.round(normalizedNoteOffset(note, state.notes.indexOf(note)));
+          if (offset !== 0) {
+            lines.push(`  ' note-offset ${offset}`);
+          }
+        });
+      }
 
       lines.push("@enduml");
       return lines.join("\n");
@@ -1502,7 +1841,7 @@
     }
 
     function exportRaster(mime, name, quality) {
-      const svg = buildSvg();
+      const svg = buildSvg({ forExport: true });
       const blob = new Blob([svg], { type: "image/svg+xml" });
       const url = URL.createObjectURL(blob);
       const image = new Image();
@@ -1616,8 +1955,9 @@
       const svg = previewCanvas.querySelector("svg");
       if (!svg) return null;
       const rect = svg.getBoundingClientRect();
-      const viewWidth = Number(svg.getAttribute("width"));
-      const viewHeight = Number(svg.getAttribute("height"));
+      const viewBox = (svg.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+      const viewWidth = Number.isFinite(viewBox[2]) ? viewBox[2] : Number(svg.getAttribute("width"));
+      const viewHeight = Number.isFinite(viewBox[3]) ? viewBox[3] : Number(svg.getAttribute("height"));
       if (!rect.width || !rect.height) return null;
       const x = ((clientX - rect.left) / rect.width) * viewWidth;
       const y = ((clientY - rect.top) / rect.height) * viewHeight;
@@ -1645,6 +1985,54 @@
       return "sync";
     }
 
+    function participantStroke(type) {
+      if (type === "database") return "#7c3aed";
+      if (type === "actor") return "#0f172a";
+      if (type === "control") return "#2563eb";
+      if (type === "entity") return "#0f766e";
+      return "#0284c7";
+    }
+
+    function participantIconSvg(type, cx, cy, stroke) {
+      if (type === "actor") {
+        return `
+          <circle cx="${cx}" cy="${cy - 9}" r="4" fill="none" stroke="${stroke}" stroke-width="1.8" />
+          <line x1="${cx}" y1="${cy - 5}" x2="${cx}" y2="${cy + 7}" stroke="${stroke}" stroke-width="1.8" />
+          <line x1="${cx - 6}" y1="${cy}" x2="${cx + 6}" y2="${cy}" stroke="${stroke}" stroke-width="1.8" />
+          <line x1="${cx}" y1="${cy + 7}" x2="${cx - 5}" y2="${cy + 14}" stroke="${stroke}" stroke-width="1.8" />
+          <line x1="${cx}" y1="${cy + 7}" x2="${cx + 5}" y2="${cy + 14}" stroke="${stroke}" stroke-width="1.8" />
+        `;
+      }
+
+      if (type === "boundary") {
+        return `
+          <line x1="${cx - 8}" y1="${cy - 8}" x2="${cx - 8}" y2="${cy + 8}" stroke="${stroke}" stroke-width="1.8" />
+          <circle cx="${cx}" cy="${cy}" r="8" fill="none" stroke="${stroke}" stroke-width="1.8" />
+        `;
+      }
+
+      if (type === "control") {
+        return `
+          <circle cx="${cx}" cy="${cy}" r="8" fill="none" stroke="${stroke}" stroke-width="1.8" />
+          <path d="M${cx - 3} ${cy - 1} Q${cx + 1} ${cy - 5} ${cx + 4} ${cy - 1}" fill="none" stroke="${stroke}" stroke-width="1.6" />
+          <path d="M${cx + 4} ${cy - 1} L${cx + 2} ${cy - 2} L${cx + 3} ${cy + 1} Z" fill="${stroke}" />
+        `;
+      }
+
+      if (type === "database") {
+        return `
+          <ellipse cx="${cx}" cy="${cy - 7}" rx="9" ry="4" fill="#ede9fe" stroke="${stroke}" stroke-width="1.6" />
+          <path d="M${cx - 9} ${cy - 7} L${cx - 9} ${cy + 7} C${cx - 9} ${cy + 11} ${cx + 9} ${cy + 11} ${cx + 9} ${cy + 7} L${cx + 9} ${cy - 7}" fill="#ede9fe" stroke="${stroke}" stroke-width="1.6" />
+          <ellipse cx="${cx}" cy="${cy + 7}" rx="9" ry="4" fill="#ede9fe" stroke="${stroke}" stroke-width="1.6" />
+        `;
+      }
+
+      return `
+        <circle cx="${cx}" cy="${cy}" r="8" fill="none" stroke="${stroke}" stroke-width="1.8" />
+        <line x1="${cx - 5}" y1="${cy + 10}" x2="${cx + 5}" y2="${cy + 10}" stroke="${stroke}" stroke-width="1.8" />
+      `;
+    }
+
     function nextId(collection, prefix) {
       let max = 0;
       collection.forEach((entry) => {
@@ -1662,6 +2050,10 @@
 
     function setField(fieldNode, visible) {
       fieldNode.style.display = visible ? "flex" : "none";
+    }
+
+    function indent(level) {
+      return "  ".repeat(Math.max(0, level));
     }
 
     function clamp(value, min, max) {
