@@ -3839,9 +3839,10 @@
           return;
         }
 
-        const noteMatch = line.match(/^note\s+(left|right|over)\s+("?[\w .-]+"?)\s*:? ?(.*)$/i);
+        const noteMatch = line.match(/^note\s+(left|right|over)(?:\s+of)?\s+(.+?)\s*:\s*(.*)$/i);
         if (noteMatch) {
-          const targetName = noteMatch[2].replace(/"/g, "");
+          const targetName = parseNoteTargetName(noteMatch[2]);
+          if (!targetName) return;
           const targetId = ensureParticipant(targetName, participants, names, () => "p" + p++);
           notes.push({
             id: "n" + n++,
@@ -3924,9 +3925,9 @@
         if (item) return { kind: "message", id: item.id };
       }
 
-      const noteMatch = line.match(/^note\s+(left|right|over)\s+("?[\w .-]+"?)\s*:? ?(.*)$/i);
+      const noteMatch = line.match(/^note\s+(left|right|over)(?:\s+of)?\s+(.+?)\s*:\s*(.*)$/i);
       if (noteMatch) {
-        const targetName = noteMatch[2].replace(/"/g, "");
+        const targetName = parseNoteTargetName(noteMatch[2]);
         const item = state.notes.find((n) => findParticipantName(n.targetId) === targetName);
         if (item) return { kind: "note", id: item.id };
       }
@@ -4077,6 +4078,14 @@
         to: unquotePlantToken(toRaw),
         label
       };
+    }
+
+    function parseNoteTargetName(rawTarget) {
+      const text = String(rawTarget || "").trim();
+      if (!text) return "";
+      const noLeadingOf = text.replace(/^of\s+/i, "").trim();
+      const firstTarget = noLeadingOf.split(",")[0].trim();
+      return unquotePlantToken(firstTarget);
     }
 
     function kindFromId(id) {
