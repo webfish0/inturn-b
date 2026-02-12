@@ -61,9 +61,25 @@
     }
 
     .title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       font-weight: 700;
       letter-spacing: 0.3px;
       white-space: nowrap;
+    }
+
+    .version-badge {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #0f172a;
+      background: #bfdbfe;
+      border: 1px solid #93c5fd;
+      border-radius: 999px;
+      padding: 2px 8px;
+      line-height: 1.2;
     }
 
     .tab-bar {
@@ -641,7 +657,7 @@
 <body>
   <header>
     <div class="header-left">
-      <div class="title">Sequence Diagram Editor</div>
+      <div class="title">inturn <span class="version-badge">v0.02</span></div>
       <div class="tab-bar" role="tablist" aria-label="Application tabs">
         <button id="tab-btn-editor" class="tab-btn active" type="button" role="tab" aria-selected="true">Editor</button>
         <button id="tab-btn-ai" class="tab-btn" type="button" role="tab" aria-selected="false">AI Tooling</button>
