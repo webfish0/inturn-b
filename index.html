@@ -3880,6 +3880,8 @@
         fragments.push(open);
       }
 
+      collapsePhantomNoteParticipants(participants, messages, notes);
+
       return {
         participants,
         messages,
@@ -4017,6 +4019,43 @@
       participants.push({ id, name, type: "entity" });
       names.set(name, id);
       return id;
+    }
+
+    function collapsePhantomNoteParticipants(participants, messages, notes) {
+      const byName = new Map();
+      participants.forEach((participant) => {
+        const key = String(participant.name || "").trim().toLowerCase();
+        if (key && !byName.has(key)) byName.set(key, participant);
+      });
+
+      const remap = new Map();
+      participants.forEach((participant) => {
+        const rawName = String(participant.name || "").trim();
+        const match = rawName.match(/^of\s+(.+)$/i);
+        if (!match) return;
+        const targetName = match[1].trim().toLowerCase();
+        const target = byName.get(targetName);
+        if (target && target.id !== participant.id) {
+          remap.set(participant.id, target.id);
+        }
+      });
+
+      if (!remap.size) return;
+
+      messages.forEach((message) => {
+        if (remap.has(message.fromId)) message.fromId = remap.get(message.fromId);
+        if (remap.has(message.toId)) message.toId = remap.get(message.toId);
+      });
+
+      notes.forEach((note) => {
+        if (remap.has(note.targetId)) note.targetId = remap.get(note.targetId);
+      });
+
+      for (let index = participants.length - 1; index >= 0; index -= 1) {
+        if (remap.has(participants[index].id)) {
+          participants.splice(index, 1);
+        }
+      }
     }
 
     function parseParticipantDeclarationLine(line) {
