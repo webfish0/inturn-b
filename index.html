@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>inturn v0.04</title>
+  <title>inturn v0.05</title>
   <style>
     :root {
       --bg: #f4f6fa;
@@ -546,6 +546,44 @@
       min-width: 0;
     }
 
+    .sequence-options {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+      background: #fbfdff;
+    }
+
+    .sequence-options label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .sequence-options input[type="number"] {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 8px;
+      background: #ffffff;
+      color: var(--ink);
+    }
+
+    .checkbox-row {
+      flex-direction: row !important;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
     .git-actions {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -801,7 +839,7 @@
 <body>
   <header>
     <div class="header-left">
-      <div class="title">inturn <span class="version-badge">v0.04</span></div>
+      <div class="title">inturn <span class="version-badge">v0.05</span></div>
       <div class="tab-bar" role="tablist" aria-label="Application tabs">
         <button id="tab-btn-editor" class="tab-btn active" type="button" role="tab" aria-selected="true">Editor</button>
         <button id="tab-btn-ai" class="tab-btn" type="button" role="tab" aria-selected="false">AI Tooling</button>
@@ -854,6 +892,18 @@
       <h3>Cross Diagram</h3>
       <div class="tool-grid">
         <button id="btn-build-c4-from-sequence" class="tool-btn" type="button">Build C4 Diagram</button>
+      </div>
+
+      <h3>Numbering</h3>
+      <div class="sequence-options">
+        <label class="checkbox-row" for="seq-autonumber-enabled">
+          <span>Autonumber messages</span>
+          <input id="seq-autonumber-enabled" type="checkbox">
+        </label>
+        <label for="seq-autonumber-start">
+          Start Number
+          <input id="seq-autonumber-start" type="number" min="1" value="1">
+        </label>
       </div>
 
       <h3>Git Sync</h3>
@@ -1279,6 +1329,10 @@
         selection: null,
         drag: null
       },
+      autoNumber: {
+        enabled: false,
+        start: 1
+      },
       aiImage: null,
       aiDiagnostics: []
     };
@@ -1307,6 +1361,8 @@
     const previewScale = document.getElementById("preview-scale");
     const previewScaleLabel = document.getElementById("preview-scale-label");
     const btnBuildC4FromSequence = document.getElementById("btn-build-c4-from-sequence");
+    const seqAutonumberEnabled = document.getElementById("seq-autonumber-enabled");
+    const seqAutonumberStart = document.getElementById("seq-autonumber-start");
 
     const propsForm = document.getElementById("props-form");
     const propsEmpty = document.getElementById("props-empty");
@@ -1459,9 +1515,9 @@
 
     function resetDiagram() {
       state.participants = [
-        { id: "p1", name: "User", type: "actor" },
-        { id: "p2", name: "UI", type: "boundary" },
-        { id: "p3", name: "API", type: "control" }
+        { id: "p1", name: "User", alias: null, type: "actor" },
+        { id: "p2", name: "UI", alias: null, type: "boundary" },
+        { id: "p3", name: "API", alias: null, type: "control" }
       ];
       state.messages = [
         { id: "m1", fromId: "p1", toId: "p2", label: "click submit", type: "sync", color: "#0f172a", dotted: false },
@@ -1474,11 +1530,13 @@
       state.fragments = [
         { id: "f1", kind: "loop", label: "for each item", startIndex: 0, endIndex: 1 }
       ];
+      state.autoNumber = { enabled: false, start: 1 };
       state.selection = null;
       state.drag = null;
       state.layoutDrag = null;
       state.contextMenu = { open: false, targetKind: null, targetId: null };
       closeContextMenu();
+      syncSequenceNumberingControls();
       syncTextFromModel();
     }
 
@@ -2879,8 +2937,10 @@
       state.messages = parsed.messages;
       state.notes = parsed.notes;
       state.fragments = parsed.fragments;
+      state.autoNumber = parsed.autoNumber || { enabled: false, start: 1 };
       normalizeDiagramState();
       state.selection = null;
+      syncSequenceNumberingControls();
       textArea.value = plantUmlText;
       render();
     }
@@ -2998,6 +3058,18 @@
       document.getElementById("btn-sync-text").addEventListener("click", syncTextFromModel);
       document.getElementById("btn-apply-text").addEventListener("click", () => {
         applyPlantUmlText(textArea.value);
+      });
+      seqAutonumberEnabled.addEventListener("change", () => {
+        readSequenceNumberingControlsToState();
+        render();
+      });
+      seqAutonumberStart.addEventListener("input", () => {
+        readSequenceNumberingControlsToState();
+        render();
+      });
+      seqAutonumberStart.addEventListener("change", () => {
+        readSequenceNumberingControlsToState();
+        render();
       });
       textArea.addEventListener("click", selectFromTextCaret);
       textArea.addEventListener("keyup", selectFromTextCaret);
@@ -3257,7 +3329,9 @@
         state.messages = parsed.messages;
         state.notes = parsed.notes;
         state.fragments = parsed.fragments;
+        state.autoNumber = parsed.autoNumber || { enabled: false, start: 1 };
         state.selection = null;
+        syncSequenceNumberingControls();
       }
       render();
     }
@@ -3275,7 +3349,11 @@
         participants: state.participants.map((item) => ({ ...item })),
         messages: state.messages.map((item) => ({ ...item })),
         notes: state.notes.map((item) => ({ ...item })),
-        fragments: state.fragments.map((item) => ({ ...item }))
+        fragments: state.fragments.map((item) => ({ ...item })),
+        autoNumber: {
+          enabled: Boolean(state.autoNumber?.enabled),
+          start: Math.max(1, Number(state.autoNumber?.start) || 1)
+        }
       };
     }
 
@@ -3288,6 +3366,7 @@
       state.participants = model.participants.map((item, index) => ({
         id: String(item.id || ("p" + (index + 1))),
         name: String(item.name || "Participant"),
+        alias: item.alias ? String(item.alias) : null,
         type: PARTICIPANT_TYPES.includes(item.type) ? item.type : "entity"
       }));
       state.messages = model.messages.map((item, index) => ({
@@ -3319,9 +3398,14 @@
         ...fragment,
         endIndex: Math.max(fragment.startIndex, fragment.endIndex)
       }));
+      state.autoNumber = {
+        enabled: Boolean(model.autoNumber?.enabled),
+        start: Math.max(1, Number(model.autoNumber?.start) || 1)
+      };
 
       normalizeDiagramState();
       state.selection = null;
+      syncSequenceNumberingControls();
     }
 
     async function listGitFiles(config, token) {
@@ -3891,7 +3975,7 @@
           `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${esc(strokeColor)}" stroke-width="2"${dash} marker-end="${markerFor(message.type)}" />` +
           `<circle class="drag-handle endpoint-handle from" data-id="${message.id}" data-kind="message" data-drag-mode="from" cx="${x1}" cy="${y}" r="6" style="stroke:${esc(strokeColor)}" />` +
           `<circle class="drag-handle endpoint-handle to" data-id="${message.id}" data-kind="message" data-drag-mode="to" cx="${x2}" cy="${y}" r="6" style="stroke:${esc(strokeColor)}" />` +
-          `<text class="editable" data-id="${message.id}" data-kind="message" data-field="label" x="${(x1 + x2) / 2}" y="${y - 8}" text-anchor="middle" font-size="13" fill="#0f172a">${esc(message.label)}</text>` +
+          `<text class="editable" data-id="${message.id}" data-kind="message" data-field="label" x="${(x1 + x2) / 2}" y="${y - 8}" text-anchor="middle" font-size="13" fill="#0f172a">${esc(displayMessageLabel(message, idx))}</text>` +
           `</g>`
         );
       });
@@ -3999,8 +4083,12 @@
     function renderItems() {
       itemsList.innerHTML = "";
       const rows = [
-        ...state.participants.map((item) => ({ id: item.id, kind: "participant", label: "Participant: " + item.name })),
-        ...state.messages.map((item, index) => ({ id: item.id, kind: "message", label: "Message " + (index + 1) + ": " + item.label })),
+        ...state.participants.map((item) => ({
+          id: item.id,
+          kind: "participant",
+          label: "Participant: " + item.name + (item.alias && item.alias !== item.name ? " (" + item.alias + ")" : "")
+        })),
+        ...state.messages.map((item, index) => ({ id: item.id, kind: "message", label: "Message " + (index + 1) + ": " + displayMessageLabel(item, index) })),
         ...state.fragments.map((item) => ({ id: item.id, kind: "fragment", label: "Fragment: " + item.kind + " " + item.label })),
         ...state.notes.map((item) => ({ id: item.id, kind: "note", label: "Note: " + item.text }))
       ];
@@ -4445,6 +4533,29 @@
       textArea.value = serializePlantUml();
     }
 
+    function syncSequenceNumberingControls() {
+      if (seqAutonumberEnabled) seqAutonumberEnabled.checked = Boolean(state.autoNumber?.enabled);
+      if (seqAutonumberStart) {
+        seqAutonumberStart.value = String(Math.max(1, Number(state.autoNumber?.start) || 1));
+        seqAutonumberStart.disabled = !Boolean(state.autoNumber?.enabled);
+      }
+    }
+
+    function readSequenceNumberingControlsToState() {
+      state.autoNumber = {
+        enabled: Boolean(seqAutonumberEnabled?.checked),
+        start: Math.max(1, Number(seqAutonumberStart?.value) || 1)
+      };
+      syncSequenceNumberingControls();
+    }
+
+    function displayMessageLabel(message, index) {
+      const label = String(message?.label || "").trim();
+      if (!state.autoNumber?.enabled) return label;
+      const number = Math.max(1, Number(state.autoNumber?.start) || 1) + index;
+      return label ? number + ". " + label : String(number);
+    }
+
     function serializePlantUml() {
       normalizeDiagramState();
       const lines = ["@startuml"];
@@ -4457,6 +4568,11 @@
         }
       });
       lines.push("");
+      if (state.autoNumber?.enabled) {
+        const start = Math.max(1, Number(state.autoNumber?.start) || 1);
+        lines.push(start === 1 ? "autonumber" : `autonumber ${start}`);
+        lines.push("");
+      }
 
       const opensByIndex = new Map();
       const closesByIndex = new Map();
@@ -4521,6 +4637,7 @@
       const messages = [];
       const notes = [];
       const fragments = [];
+      const autoNumber = { enabled: false, start: 1 };
       const names = new Map();
       const stack = [];
 
@@ -4566,6 +4683,13 @@
         const noteRowMatch = line.match(/^'\s*note-row\s+(\d+)$/i);
         if (noteRowMatch) {
           if (lastNote) lastNote.offsetY = clamp(Number(noteRowMatch[1]) * 58, -220, 2200);
+          return;
+        }
+
+        const autoNumberMatch = line.match(/^autonumber(?:\s+(\d+))?$/i);
+        if (autoNumberMatch) {
+          autoNumber.enabled = true;
+          autoNumber.start = Math.max(1, Number(autoNumberMatch[1]) || 1);
           return;
         }
 
@@ -4673,6 +4797,7 @@
       collapsePhantomNoteParticipants(participants, messages, notes);
 
       return {
+        autoNumber,
         participants,
         messages,
         notes,
