@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sequence Diagram Editor</title>
+  <title>inturn v0.04</title>
   <style>
     :root {
       --bg: #f4f6fa;
@@ -801,7 +801,7 @@
 <body>
   <header>
     <div class="header-left">
-      <div class="title">inturn <span class="version-badge">v0.02</span></div>
+      <div class="title">inturn <span class="version-badge">v0.04</span></div>
       <div class="tab-bar" role="tablist" aria-label="Application tabs">
         <button id="tab-btn-editor" class="tab-btn active" type="button" role="tab" aria-selected="true">Editor</button>
         <button id="tab-btn-ai" class="tab-btn" type="button" role="tab" aria-selected="false">AI Tooling</button>
@@ -4449,7 +4449,12 @@
       normalizeDiagramState();
       const lines = ["@startuml"];
       state.participants.forEach((participant) => {
-        lines.push(`${participant.type} ${plantToken(participant.name)}`);
+        const refName = String(participant.alias || "").trim();
+        if (refName && refName !== participant.name) {
+          lines.push(`${participant.type} ${plantToken(participant.name)} as ${plantToken(refName)}`);
+        } else {
+          lines.push(`${participant.type} ${plantToken(participant.name)}`);
+        }
       });
       lines.push("");
 
@@ -4473,7 +4478,7 @@
 
         lines.push(
           indent(indentLevel) +
-          `${plantToken(findParticipantName(message.fromId))} ${arrowFromType(message.type)} ${plantToken(findParticipantName(message.toId))}: ${message.label}`
+          `${plantToken(findParticipantReference(message.fromId))} ${arrowFromType(message.type)} ${plantToken(findParticipantReference(message.toId))}: ${message.label}`
         );
         if (message.dotted || (message.color && message.color.toLowerCase() !== "#0f172a")) {
           const colorValue = normalizeColor(message.color || "#0f172a");
@@ -4492,7 +4497,7 @@
       if (state.notes.length) {
         lines.push("");
         state.notes.forEach((note) => {
-          const noteTarget = plantToken(findParticipantName(note.targetId));
+          const noteTarget = plantToken(findParticipantReference(note.targetId));
           const noteHead = note.position === "over"
             ? `note over ${noteTarget}`
             : `note ${note.position} of ${noteTarget}`;
@@ -4566,20 +4571,21 @@
 
         const participantDecl = parseParticipantDeclarationLine(line);
         if (participantDecl) {
-          const preferredName = participantDecl.displayName || participantDecl.codeName;
-          const existingId = names.get(participantDecl.codeName) || names.get(preferredName);
+          const preferredName = participantDecl.displayName || participantDecl.referenceName;
+          const existingId = names.get(participantDecl.referenceName) || names.get(preferredName);
           if (!existingId) {
             const id = "p" + p++;
-            participants.push({ id, name: preferredName, type: participantDecl.type });
-            names.set(participantDecl.codeName, id);
+            participants.push({ id, name: preferredName, alias: participantDecl.alias || null, type: participantDecl.type });
+            names.set(participantDecl.referenceName, id);
             names.set(preferredName, id);
           } else {
             const existing = participants.find((item) => item.id === existingId);
             if (existing) {
               if (participantDecl.type !== "entity" || existing.type === "entity") existing.type = participantDecl.type;
               existing.name = preferredName || existing.name;
+              if (participantDecl.alias) existing.alias = participantDecl.alias;
             }
-            names.set(participantDecl.codeName, existingId);
+            names.set(participantDecl.referenceName, existingId);
             names.set(preferredName, existingId);
           }
           return;
@@ -4688,8 +4694,8 @@
 
       const participantDecl = parseParticipantDeclarationLine(line);
       if (participantDecl) {
-        const name = participantDecl.displayName || participantDecl.codeName;
-        const item = state.participants.find((p) => p.name === name);
+        const name = participantDecl.displayName || participantDecl.referenceName;
+        const item = state.participants.find((p) => p.name === name || findParticipantReference(p.id) === participantDecl.referenceName);
         if (item) return { kind: "participant", id: item.id };
       }
 
@@ -4706,7 +4712,7 @@
         const fromName = parsedMessage.from;
         const toName = parsedMessage.to;
         const item = state.messages.find((m) => {
-          return findParticipantName(m.fromId) === fromName && findParticipantName(m.toId) === toName;
+          return findParticipantReference(m.fromId) === fromName && findParticipantReference(m.toId) === toName;
         });
         if (item) return { kind: "message", id: item.id };
       }
@@ -4714,7 +4720,7 @@
       const noteMatch = line.match(/^note\s+(left|right|over)(?:\s+of)?\s+(.+?)\s*:\s*(.*)$/i);
       if (noteMatch) {
         const targetName = parseNoteTargetName(noteMatch[2]);
-        const item = state.notes.find((n) => findParticipantName(n.targetId) === targetName);
+        const item = state.notes.find((n) => findParticipantReference(n.targetId) === targetName);
         if (item) return { kind: "note", id: item.id };
       }
 
@@ -6090,7 +6096,7 @@
       state.participants.forEach((participant) => {
         const option = document.createElement("option");
         option.value = participant.id;
-        option.textContent = participant.name;
+        option.textContent = participant.name + (participant.alias && participant.alias !== participant.name ? " (" + participant.alias + ")" : "");
         selectNode.appendChild(option);
       });
       selectNode.value = selectedId;
@@ -6100,10 +6106,16 @@
       return state.participants.find((p) => p.id === id)?.name || "";
     }
 
+    function findParticipantReference(id) {
+      const participant = state.participants.find((p) => p.id === id);
+      if (!participant) return "";
+      return String(participant.alias || "").trim() || participant.name || "";
+    }
+
     function ensureParticipant(name, participants, names, nextIdFn) {
       if (names.has(name)) return names.get(name);
       const id = nextIdFn();
-      participants.push({ id, name, type: "entity" });
+      participants.push({ id, name, alias: null, type: "entity" });
       names.set(name, id);
       return id;
     }
@@ -6158,14 +6170,35 @@
       const declMatch = rest.match(/^("[^"]+"|[\w.-]+)(?:\s+as\s+("[^"]+"|[\w .-]+))?$/i);
       if (!declMatch) return null;
 
-      const codeName = unquotePlantToken(declMatch[1]);
-      const displayName = unquotePlantToken(declMatch[2] || declMatch[1]);
-      if (!codeName) return null;
+      const firstRaw = String(declMatch[1] || "").trim();
+      const secondRaw = String(declMatch[2] || "").trim();
+      const firstValue = unquotePlantToken(firstRaw);
+      const secondValue = unquotePlantToken(secondRaw);
+      if (!firstValue) return null;
+
+      const firstQuoted = isQuotedPlantToken(firstRaw);
+      const secondQuoted = isQuotedPlantToken(secondRaw);
+      let displayName = firstValue;
+      let alias = null;
+
+      if (secondRaw) {
+        if (firstQuoted && !secondQuoted) {
+          displayName = firstValue;
+          alias = secondValue;
+        } else if (!firstQuoted && secondQuoted) {
+          displayName = secondValue;
+          alias = firstValue;
+        } else {
+          displayName = firstValue;
+          alias = secondValue;
+        }
+      }
 
       return {
         type: keyword === "participant" ? "entity" : keyword,
-        codeName,
-        displayName
+        alias,
+        displayName,
+        referenceName: alias || displayName
       };
     }
 
@@ -6176,6 +6209,11 @@
         return text.slice(1, -1).replace(/\\"/g, "\"").trim();
       }
       return text;
+    }
+
+    function isQuotedPlantToken(value) {
+      const text = String(value || "").trim();
+      return text.startsWith("\"") && text.endsWith("\"");
     }
 
     function plantToken(value) {
