@@ -167,6 +167,22 @@
       gap: 10px;
     }
 
+    .c4-workbench {
+      padding: 10px;
+      height: calc(100vh - 56px);
+      min-height: 620px;
+      display: grid;
+      grid-template-columns: minmax(240px, 320px) minmax(420px, 1fr) minmax(280px, 340px);
+      gap: 10px;
+    }
+
+    .c4-stack {
+      display: grid;
+      grid-template-rows: minmax(320px, 1fr) minmax(220px, 0.9fr);
+      gap: 10px;
+      min-height: 0;
+    }
+
     .ai-panel {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -493,6 +509,16 @@
       border-color: #7dd3fc;
     }
 
+    .c4-summary {
+      font-size: 12px;
+      color: #0c4a6e;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      border-radius: 8px;
+      padding: 8px;
+      line-height: 1.4;
+    }
+
     .git-panel {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -594,6 +620,44 @@
 
     .drag-handle:active {
       cursor: grabbing;
+    }
+
+    .c4-resize-handle {
+      fill: #ffffff;
+      stroke: #0284c7;
+      stroke-width: 2;
+      cursor: nwse-resize;
+    }
+
+    .c4-boundary-label {
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      fill: #475569;
+    }
+
+    .c4-relationship-hit {
+      cursor: pointer;
+    }
+
+    .c4-props form {
+      display: grid;
+      gap: 8px;
+    }
+
+    .c4-props label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+    }
+
+    .c4-props input,
+    .c4-props select {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px;
+      background: #ffffff;
     }
 
     .editable {
@@ -721,6 +785,16 @@
         min-height: calc(100vh - 56px);
         grid-template-columns: 1fr;
       }
+
+      .c4-workbench {
+        height: auto;
+        min-height: calc(100vh - 56px);
+        grid-template-columns: 1fr;
+      }
+
+      .c4-stack {
+        grid-template-rows: minmax(280px, auto) auto;
+      }
     }
   </style>
 </head>
@@ -731,6 +805,7 @@
       <div class="tab-bar" role="tablist" aria-label="Application tabs">
         <button id="tab-btn-editor" class="tab-btn active" type="button" role="tab" aria-selected="true">Editor</button>
         <button id="tab-btn-ai" class="tab-btn" type="button" role="tab" aria-selected="false">AI Tooling</button>
+        <button id="tab-btn-c4" class="tab-btn" type="button" role="tab" aria-selected="false">C4 Diagram</button>
       </div>
     </div>
     <div class="toolbar">
@@ -774,6 +849,11 @@
         <button class="tool-btn" data-add-fragment="alt">Alt</button>
         <button class="tool-btn" data-add-fragment="opt">Opt</button>
         <button class="tool-btn" data-add-fragment="par">Par</button>
+      </div>
+
+      <h3>Cross Diagram</h3>
+      <div class="tool-grid">
+        <button id="btn-build-c4-from-sequence" class="tool-btn" type="button">Build C4 Diagram</button>
       </div>
 
       <h3>Git Sync</h3>
@@ -1039,6 +1119,101 @@
     </section>
   </section>
 
+  <section id="c4-tab" class="c4-workbench" hidden>
+    <section class="ai-panel">
+      <h3>C4 Elements</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" data-add-c4-node="person" type="button">Add Person</button>
+        <button class="tool-btn" data-add-c4-node="system" type="button">Add System</button>
+        <button class="tool-btn" data-add-c4-node="container" type="button">Add Container</button>
+        <button class="tool-btn" data-add-c4-node="database" type="button">Add Database</button>
+        <button class="tool-btn" data-add-c4-boundary="system" type="button">Add Boundary</button>
+      </div>
+
+      <h3>Relationships</h3>
+      <div class="tool-grid">
+        <button id="btn-c4-add-relationship" class="tool-btn" type="button">Add Relationship</button>
+        <button id="btn-c4-auto-layout" class="tool-btn" type="button">Auto Layout</button>
+        <button id="btn-c4-import-sequence" class="tool-btn" type="button">Build From Sequence</button>
+        <button id="btn-c4-build-sequence" class="tool-btn" type="button">Build Sequence</button>
+      </div>
+
+      <div class="hint">Use this tab for a first-pass C4 container map built from the current sequence diagram, or create a standalone architecture view manually.</div>
+      <div id="c4-items-summary" class="c4-summary">0 nodes, 0 relationships, 0 boundaries.</div>
+
+      <h3>C4 Items</h3>
+      <div class="items" id="c4-items-list"></div>
+    </section>
+
+    <div class="c4-stack">
+      <section class="ai-panel">
+        <div class="preview-head">
+          <div>C4 Preview</div>
+          <span class="status" id="c4-status">Ready</span>
+        </div>
+        <div class="canvas-wrap" id="c4-canvas-wrap">
+          <div id="c4-preview-canvas"></div>
+        </div>
+      </section>
+
+      <section class="ai-panel">
+        <h3>C4 PlantUML</h3>
+        <textarea id="c4-source-text" placeholder="C4 PlantUML appears here..."></textarea>
+        <div class="text-actions">
+          <button id="btn-c4-format-source" type="button">Format Source</button>
+          <button id="btn-c4-apply-text" type="button">Apply Text</button>
+          <button id="btn-c4-sync-text" type="button">Sync From Diagram</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="ai-panel c4-props">
+      <h3>C4 Properties</h3>
+      <div id="c4-props-empty" class="hint">Select an item to edit.</div>
+      <form id="c4-props-form" hidden>
+        <label id="c4-field-name">
+          Name / Label
+          <input id="c4-prop-name" type="text">
+        </label>
+        <label id="c4-field-type">
+          Type
+          <select id="c4-prop-type"></select>
+        </label>
+        <label id="c4-field-description">
+          Description
+          <input id="c4-prop-description" type="text">
+        </label>
+        <label id="c4-field-technology">
+          Technology
+          <input id="c4-prop-technology" type="text">
+        </label>
+        <label id="c4-field-boundary">
+          Boundary / Parent
+          <select id="c4-prop-boundary"></select>
+        </label>
+        <label id="c4-field-from">
+          From
+          <select id="c4-prop-from"></select>
+        </label>
+        <label id="c4-field-to">
+          To
+          <select id="c4-prop-to"></select>
+        </label>
+        <label id="c4-field-width">
+          Width
+          <input id="c4-prop-width" type="number" min="160">
+        </label>
+        <label id="c4-field-height">
+          Height
+          <input id="c4-prop-height" type="number" min="120">
+        </label>
+      </form>
+      <button id="btn-c4-delete-item" type="button" class="tool-btn danger-btn" hidden>Delete Selected Item</button>
+      <div id="c4-props-hint" class="hint"></div>
+      <div class="hint">Drag nodes and boundaries in the preview. Double-click labels to edit in place. Edit source directly if you want to fine-tune aliases, boundaries, or relationships.</div>
+    </section>
+  </section>
+
   <div id="context-menu" class="context-menu" hidden>
     <button id="ctx-reverse-arrow" type="button">Reverse Direction</button>
     <label id="ctx-arrow-color-row" for="ctx-arrow-color">
@@ -1056,6 +1231,8 @@
     const PARTICIPANT_TYPES = ["actor", "boundary", "control", "entity", "database"];
     const MESSAGE_TYPES = ["sync", "async", "return", "create", "destroy"];
     const FRAGMENT_TYPES = ["loop", "alt", "opt", "par"];
+    const C4_NODE_TYPES = ["person", "system", "container", "database"];
+    const C4_BOUNDARY_TYPES = ["system", "container", "enterprise", "boundary"];
     const GIT_CONFIG_KEY = "sequence-diagram-editor-git-config-v1";
     const AI_CONFIG_KEY = "sequence-diagram-editor-ai-config-v1";
     const AI_OAUTH_SESSION_KEY = "sequence-diagram-editor-ai-oauth-session-v1";
@@ -1095,6 +1272,13 @@
         oauthRedirectUri: "",
         availableModels: []
       },
+      c4: {
+        nodes: [],
+        boundaries: [],
+        relationships: [],
+        selection: null,
+        drag: null
+      },
       aiImage: null,
       aiDiagnostics: []
     };
@@ -1113,13 +1297,16 @@
     const statusEl = document.getElementById("status");
     const mainLayout = document.getElementById("main-layout");
     const aiTab = document.getElementById("ai-tab");
+    const c4Tab = document.getElementById("c4-tab");
     const tabBtnEditor = document.getElementById("tab-btn-editor");
     const tabBtnAi = document.getElementById("tab-btn-ai");
+    const tabBtnC4 = document.getElementById("tab-btn-c4");
     const splitLeft = document.getElementById("split-left");
     const splitRight = document.getElementById("split-right");
     const splitHorizontal = document.getElementById("split-horizontal");
     const previewScale = document.getElementById("preview-scale");
     const previewScaleLabel = document.getElementById("preview-scale-label");
+    const btnBuildC4FromSequence = document.getElementById("btn-build-c4-from-sequence");
 
     const propsForm = document.getElementById("props-form");
     const propsEmpty = document.getElementById("props-empty");
@@ -1209,13 +1396,51 @@
     const aiRowOpenaiProject = document.getElementById("ai-row-openai-project");
     const aiRowAnthropicVersion = document.getElementById("ai-row-anthropic-version");
 
+    const c4PreviewCanvas = document.getElementById("c4-preview-canvas");
+    const c4CanvasWrap = document.getElementById("c4-canvas-wrap");
+    const c4ItemsList = document.getElementById("c4-items-list");
+    const c4ItemsSummary = document.getElementById("c4-items-summary");
+    const c4Status = document.getElementById("c4-status");
+    const c4SourceText = document.getElementById("c4-source-text");
+    const btnC4AddRelationship = document.getElementById("btn-c4-add-relationship");
+    const btnC4AutoLayout = document.getElementById("btn-c4-auto-layout");
+    const btnC4ImportSequence = document.getElementById("btn-c4-import-sequence");
+    const btnC4BuildSequence = document.getElementById("btn-c4-build-sequence");
+    const btnC4FormatSource = document.getElementById("btn-c4-format-source");
+    const btnC4ApplyText = document.getElementById("btn-c4-apply-text");
+    const btnC4SyncText = document.getElementById("btn-c4-sync-text");
+    const c4PropsForm = document.getElementById("c4-props-form");
+    const c4PropsEmpty = document.getElementById("c4-props-empty");
+    const c4PropsHint = document.getElementById("c4-props-hint");
+    const btnC4DeleteItem = document.getElementById("btn-c4-delete-item");
+    const c4FieldName = document.getElementById("c4-field-name");
+    const c4FieldType = document.getElementById("c4-field-type");
+    const c4FieldDescription = document.getElementById("c4-field-description");
+    const c4FieldTechnology = document.getElementById("c4-field-technology");
+    const c4FieldBoundary = document.getElementById("c4-field-boundary");
+    const c4FieldFrom = document.getElementById("c4-field-from");
+    const c4FieldTo = document.getElementById("c4-field-to");
+    const c4FieldWidth = document.getElementById("c4-field-width");
+    const c4FieldHeight = document.getElementById("c4-field-height");
+    const c4PropName = document.getElementById("c4-prop-name");
+    const c4PropType = document.getElementById("c4-prop-type");
+    const c4PropDescription = document.getElementById("c4-prop-description");
+    const c4PropTechnology = document.getElementById("c4-prop-technology");
+    const c4PropBoundary = document.getElementById("c4-prop-boundary");
+    const c4PropFrom = document.getElementById("c4-prop-from");
+    const c4PropTo = document.getElementById("c4-prop-to");
+    const c4PropWidth = document.getElementById("c4-prop-width");
+    const c4PropHeight = document.getElementById("c4-prop-height");
+
     function init() {
       resetDiagram();
+      resetC4();
       bindTabs();
       bindToolbar();
       bindToolButtons();
       bindProps();
       bindTextControls();
+      bindC4Controls();
       bindGitControls();
       loadGitConfig();
       bindAiControls();
@@ -1229,6 +1454,7 @@
       applyPreviewScaleUi();
       switchTab(state.activeTab);
       render();
+      renderC4();
     }
 
     function resetDiagram() {
@@ -1256,23 +1482,51 @@
       syncTextFromModel();
     }
 
+    function resetC4() {
+      state.c4.nodes = [
+        { id: "cn1", alias: "user", name: "User", kind: "person", description: "Primary business user", technology: "", x: 70, y: 170, boundaryId: null },
+        { id: "cn2", alias: "mobile_app", name: "Mobile App", kind: "container", description: "Customer-facing journey", technology: "Web / Mobile UI", x: 340, y: 160, boundaryId: "cb1" },
+        { id: "cn3", alias: "payments_api", name: "Payments API", kind: "system", description: "Coordinates authorisation and workflow", technology: "Service", x: 620, y: 160, boundaryId: "cb1" },
+        { id: "cn4", alias: "bank_host", name: "Bank Host", kind: "database", description: "Authorisation host", technology: "Core banking", x: 930, y: 165, boundaryId: null }
+      ];
+      state.c4.boundaries = [
+        { id: "cb1", alias: "payments_boundary", name: "Payments Platform", kind: "system", x: 280, y: 70, width: 500, height: 260, parentId: null }
+      ];
+      state.c4.relationships = [
+        { id: "cr1", fromId: "cn1", toId: "cn2", label: "Initiates payment", technology: "HTTPS" },
+        { id: "cr2", fromId: "cn2", toId: "cn3", label: "Submits transaction", technology: "JSON / REST" },
+        { id: "cr3", fromId: "cn3", toId: "cn4", label: "Requests authorisation", technology: "ISO 8583" }
+      ];
+      state.c4.selection = null;
+      state.c4.drag = null;
+      syncC4TextFromModel();
+    }
+
     function bindTabs() {
       tabBtnEditor.addEventListener("click", () => switchTab("editor"));
       tabBtnAi.addEventListener("click", () => switchTab("ai"));
+      tabBtnC4.addEventListener("click", () => switchTab("c4"));
     }
 
     function switchTab(tab) {
-      const next = tab === "ai" ? "ai" : "editor";
+      const next = tab === "ai" ? "ai" : tab === "c4" ? "c4" : "editor";
       state.activeTab = next;
       const isEditor = next === "editor";
+      const isAi = next === "ai";
+      const isC4 = next === "c4";
       mainLayout.hidden = !isEditor;
-      aiTab.hidden = isEditor;
+      aiTab.hidden = !isAi;
+      c4Tab.hidden = !isC4;
       tabBtnEditor.classList.toggle("active", isEditor);
-      tabBtnAi.classList.toggle("active", !isEditor);
+      tabBtnAi.classList.toggle("active", isAi);
+      tabBtnC4.classList.toggle("active", isC4);
       tabBtnEditor.setAttribute("aria-selected", isEditor ? "true" : "false");
-      tabBtnAi.setAttribute("aria-selected", isEditor ? "false" : "true");
+      tabBtnAi.setAttribute("aria-selected", isAi ? "true" : "false");
+      tabBtnC4.setAttribute("aria-selected", isC4 ? "true" : "false");
       closeContextMenu();
       removeInlineEditor();
+      if (isEditor) render();
+      if (isC4) renderC4();
     }
 
     function bindAiControls() {
@@ -2633,11 +2887,16 @@
 
     function bindToolbar() {
       document.getElementById("btn-new").addEventListener("click", () => {
+        if (state.activeTab === "c4") {
+          resetC4();
+          renderC4();
+          return;
+        }
         resetDiagram();
         render();
       });
       document.getElementById("btn-export-svg").addEventListener("click", () => {
-        downloadBlob(buildSvg({ forExport: true }), "diagram.svg", "image/svg+xml");
+        downloadBlob(buildActiveSvg({ forExport: true }), activeDiagramFileName("svg"), "image/svg+xml");
       });
       document.getElementById("btn-export-png").addEventListener("click", exportPng);
       document.getElementById("btn-export-jpeg").addEventListener("click", exportJpeg);
@@ -2655,6 +2914,15 @@
       });
       document.querySelectorAll("[data-add-fragment]").forEach((btn) => {
         btn.addEventListener("click", () => addFragment(btn.getAttribute("data-add-fragment")));
+      });
+      btnBuildC4FromSequence.addEventListener("click", () => {
+        buildC4FromSequenceAndOpen();
+      });
+      document.querySelectorAll("[data-add-c4-node]").forEach((btn) => {
+        btn.addEventListener("click", () => addC4Node(btn.getAttribute("data-add-c4-node")));
+      });
+      document.querySelectorAll("[data-add-c4-boundary]").forEach((btn) => {
+        btn.addEventListener("click", () => addC4Boundary(btn.getAttribute("data-add-c4-boundary")));
       });
     }
 
@@ -2733,6 +3001,42 @@
       });
       textArea.addEventListener("click", selectFromTextCaret);
       textArea.addEventListener("keyup", selectFromTextCaret);
+    }
+
+    function bindC4Controls() {
+      [c4PropName, c4PropType, c4PropDescription, c4PropTechnology, c4PropBoundary, c4PropFrom, c4PropTo, c4PropWidth, c4PropHeight].forEach((node) => {
+        node.addEventListener("input", applyC4Props);
+        node.addEventListener("change", applyC4Props);
+      });
+
+      btnC4AddRelationship.addEventListener("click", addC4Relationship);
+      btnC4AutoLayout.addEventListener("click", () => {
+        autoLayoutC4();
+        renderC4();
+      });
+      btnC4ImportSequence.addEventListener("click", () => {
+        importSequenceToC4();
+        renderC4();
+        c4Status.textContent = "Built C4 draft from sequence diagram.";
+      });
+      btnC4BuildSequence.addEventListener("click", () => {
+        buildSequenceFromC4AndOpen();
+      });
+
+      btnC4FormatSource.addEventListener("click", () => {
+        applyC4Text(c4SourceText.value);
+      });
+      btnC4ApplyText.addEventListener("click", () => {
+        applyC4Text(c4SourceText.value);
+      });
+      btnC4SyncText.addEventListener("click", syncC4TextFromModel);
+      c4SourceText.addEventListener("click", selectC4FromTextCaret);
+      c4SourceText.addEventListener("keyup", selectC4FromTextCaret);
+
+      btnC4DeleteItem.addEventListener("click", () => {
+        if (!state.c4.selection) return;
+        if (deleteC4Selection(state.c4.selection)) renderC4();
+      });
     }
 
     function bindGitControls() {
@@ -3368,6 +3672,13 @@
           applyLayoutDrag(event.clientX, event.clientY);
           return;
         }
+        if (state.c4.drag) {
+          const modeText = state.c4.drag.mode && state.c4.drag.mode !== "move" ? " (" + state.c4.drag.mode + ")" : "";
+          c4Status.textContent = "Dragging " + state.c4.drag.kind + modeText + "...";
+          state.c4.drag.lastX = event.clientX;
+          state.c4.drag.lastY = event.clientY;
+          return;
+        }
         if (!state.drag) return;
         const modeText = state.drag.mode && state.drag.mode !== "move" ? " (" + state.drag.mode + ")" : "";
         statusEl.textContent = "Dragging " + state.drag.kind + modeText + "...";
@@ -3380,6 +3691,13 @@
           applyLayoutDrag(event.clientX, event.clientY);
           state.layoutDrag = null;
           statusEl.textContent = "Rendered";
+          return;
+        }
+        if (state.c4.drag) {
+          const drag = state.c4.drag;
+          state.c4.drag = null;
+          applyC4Drop(drag, event.clientX, event.clientY);
+          c4Status.textContent = "Rendered";
           return;
         }
         if (!state.drag) return;
@@ -3837,8 +4155,7 @@
     }
 
     function removeInlineEditor() {
-      const existing = canvasWrap.querySelector(".inline-editor");
-      if (existing) existing.remove();
+      document.querySelectorAll(".inline-editor").forEach((node) => node.remove());
     }
 
     function openContextMenuForItem(kind, id, clientX, clientY) {
@@ -4404,16 +4721,1319 @@
       return null;
     }
 
+    function addC4Node(kind) {
+      const id = nextId(state.c4.nodes, "cn");
+      const alias = uniqueC4Alias(kind);
+      const position = nextC4Placement();
+      state.c4.nodes.push({
+        id,
+        alias,
+        name: "New " + capitalize(kind),
+        kind: C4_NODE_TYPES.includes(kind) ? kind : "container",
+        description: "",
+        technology: "",
+        x: position.x,
+        y: position.y,
+        boundaryId: state.c4.selection && state.c4.selection.kind === "boundary" ? state.c4.selection.id : null
+      });
+      state.c4.selection = { kind: "node", id };
+      renderC4();
+    }
+
+    function addC4Boundary(kind) {
+      const id = nextId(state.c4.boundaries, "cb");
+      const position = nextC4Placement(state.c4.boundaries.length);
+      state.c4.boundaries.push({
+        id,
+        alias: uniqueC4Alias(kind + "_boundary"),
+        name: "New " + capitalize(kind) + " Boundary",
+        kind: C4_BOUNDARY_TYPES.includes(kind) ? kind : "system",
+        x: position.x - 40,
+        y: position.y - 70,
+        width: 360,
+        height: 240,
+        parentId: state.c4.selection && state.c4.selection.kind === "boundary" ? state.c4.selection.id : null
+      });
+      state.c4.selection = { kind: "boundary", id };
+      renderC4();
+    }
+
+    function addC4Relationship() {
+      if (state.c4.nodes.length < 2) return;
+      const selectedNodeId = state.c4.selection && state.c4.selection.kind === "node" ? state.c4.selection.id : null;
+      const fromId = selectedNodeId || state.c4.nodes[0].id;
+      const toId = state.c4.nodes.find((node) => node.id !== fromId)?.id;
+      if (!toId) return;
+      const id = nextId(state.c4.relationships, "cr");
+      state.c4.relationships.push({
+        id,
+        fromId,
+        toId,
+        label: "Uses",
+        technology: ""
+      });
+      state.c4.selection = { kind: "relationship", id };
+      renderC4();
+    }
+
+    function importSequenceToC4() {
+      const nodes = [];
+      const relationships = [];
+      const participantMap = new Map();
+
+      state.participants.forEach((participant, index) => {
+        const id = "cn" + (index + 1);
+        const alias = uniqueC4Alias(participant.name || participant.id, nodes, []);
+        const x = 90 + (index % 3) * 270;
+        const y = 100 + Math.floor(index / 3) * 170;
+        const node = {
+          id,
+          alias,
+          name: participant.name,
+          kind: inferC4NodeKindFromParticipant(participant.type),
+          description: participant.type + " from sequence diagram",
+          technology: participant.type === "database" ? "Data store" : "",
+          x,
+          y,
+          boundaryId: null
+        };
+        nodes.push(node);
+        participantMap.set(participant.id, node.id);
+      });
+
+      const relMap = new Map();
+      state.messages.forEach((message) => {
+        const fromId = participantMap.get(message.fromId);
+        const toId = participantMap.get(message.toId);
+        if (!fromId || !toId || fromId === toId) return;
+        const key = fromId + "->" + toId;
+        if (!relMap.has(key)) {
+          relMap.set(key, {
+            id: "cr" + (relMap.size + 1),
+            fromId,
+            toId,
+            labels: [],
+            technologies: []
+          });
+        }
+        const entry = relMap.get(key);
+        const label = String(message.label || "").trim();
+        if (label && !entry.labels.includes(label)) entry.labels.push(label);
+        if (message.type && !entry.technologies.includes(message.type)) entry.technologies.push(message.type);
+      });
+
+      relMap.forEach((entry) => {
+        relationships.push({
+          id: entry.id,
+          fromId: entry.fromId,
+          toId: entry.toId,
+          label: entry.labels.slice(0, 3).join(" / ") || "Interaction",
+          technology: entry.technologies.join(", ")
+        });
+      });
+
+      state.c4.nodes = nodes;
+      state.c4.boundaries = [];
+      state.c4.relationships = relationships;
+      state.c4.selection = null;
+      autoLayoutC4();
+      c4Status.textContent = "Built C4 draft from sequence diagram.";
+    }
+
+    function buildC4FromSequenceAndOpen() {
+      importSequenceToC4();
+      switchTab("c4");
+      c4Status.textContent = "Built C4 draft from sequence diagram.";
+    }
+
+    function importC4ToSequence() {
+      const sortedNodes = [...state.c4.nodes].sort((a, b) => {
+        const xDiff = (Number(a.x) || 0) - (Number(b.x) || 0);
+        if (xDiff !== 0) return xDiff;
+        const yDiff = (Number(a.y) || 0) - (Number(b.y) || 0);
+        if (yDiff !== 0) return yDiff;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+
+      const participants = [];
+      const participantMap = new Map();
+      sortedNodes.forEach((node, index) => {
+        const participant = {
+          id: "p" + (index + 1),
+          name: node.name || ("Participant " + (index + 1)),
+          type: inferParticipantTypeFromC4Node(node.kind)
+        };
+        participants.push(participant);
+        participantMap.set(node.id, participant.id);
+      });
+
+      const messages = [];
+      state.c4.relationships.forEach((relationship, index) => {
+        const fromId = participantMap.get(relationship.fromId);
+        const toId = participantMap.get(relationship.toId);
+        if (!fromId || !toId) return;
+        const labelParts = [relationship.label || "Interaction"];
+        if (relationship.technology) labelParts.push("[" + relationship.technology + "]");
+        messages.push({
+          id: "m" + (index + 1),
+          fromId,
+          toId,
+          label: labelParts.join(" ").trim(),
+          type: "sync",
+          color: "#0f172a",
+          dotted: false
+        });
+      });
+
+      state.participants = participants;
+      state.messages = messages;
+      state.notes = [];
+      state.fragments = [];
+      state.selection = null;
+      normalizeDiagramState();
+    }
+
+    function buildSequenceFromC4AndOpen() {
+      importC4ToSequence();
+      switchTab("editor");
+      statusEl.textContent = "Built sequence draft from C4 diagram.";
+    }
+
+    function inferParticipantTypeFromC4Node(kind) {
+      if (kind === "person") return "actor";
+      if (kind === "database") return "database";
+      if (kind === "system") return "control";
+      return "boundary";
+    }
+
+    function inferC4NodeKindFromParticipant(type) {
+      if (type === "actor") return "person";
+      if (type === "database") return "database";
+      if (type === "boundary") return "container";
+      if (type === "control") return "system";
+      return "container";
+    }
+
+    function nextC4Placement(indexOverride) {
+      const index = Number.isFinite(indexOverride) ? Number(indexOverride) : state.c4.nodes.length + state.c4.boundaries.length;
+      return {
+        x: 80 + (index % 3) * 260,
+        y: 100 + Math.floor(index / 3) * 150
+      };
+    }
+
+    function renderC4() {
+      normalizeC4State();
+      c4PreviewCanvas.innerHTML = buildC4Svg();
+      bindC4SvgInteractions();
+      renderC4Items();
+      renderC4Props();
+      syncC4TextFromModel();
+      c4Status.textContent = "Rendered";
+    }
+
+    function buildC4Svg(options = {}) {
+      const boxes = state.c4.nodes.map((node) => c4NodeBox(node));
+      const boundaryMaxX = state.c4.boundaries.reduce((max, boundary) => Math.max(max, boundary.x + boundary.width), 0);
+      const boundaryMaxY = state.c4.boundaries.reduce((max, boundary) => Math.max(max, boundary.y + boundary.height), 0);
+      const nodeMaxX = boxes.reduce((max, box) => Math.max(max, box.x + box.width), 0);
+      const nodeMaxY = boxes.reduce((max, box) => Math.max(max, box.y + box.height), 0);
+      const width = Math.max(980, boundaryMaxX, nodeMaxX) + 80;
+      const height = Math.max(560, boundaryMaxY, nodeMaxY) + 80;
+
+      const groups = [];
+      const relationshipLayout = buildC4RelationshipLayout();
+      const sortedBoundaries = [...state.c4.boundaries].sort((a, b) => c4BoundaryDepth(a.id) - c4BoundaryDepth(b.id));
+      sortedBoundaries.forEach((boundary) => {
+        const tint = c4BoundaryTint(boundary.kind);
+        groups.push(
+          `<g class="svg-item" data-id="${boundary.id}" data-kind="boundary">` +
+          `<rect class="drag-handle" data-id="${boundary.id}" data-kind="boundary" data-drag-mode="move" x="${boundary.x}" y="${boundary.y}" width="${boundary.width}" height="${boundary.height}" rx="18" fill="${tint.fill}" stroke="${tint.stroke}" stroke-width="2.2" stroke-dasharray="10 6" />` +
+          `<text class="editable c4-editable c4-boundary-label" data-id="${boundary.id}" data-kind="boundary" data-field="name" x="${boundary.x + 18}" y="${boundary.y + 24}">${esc(capitalize(boundary.kind) + " Boundary")}</text>` +
+          `<text class="editable c4-editable" data-id="${boundary.id}" data-kind="boundary" data-field="name" x="${boundary.x + 18}" y="${boundary.y + 46}" font-size="18" font-weight="700" fill="#0f172a">${esc(boundary.name)}</text>` +
+          `<circle class="drag-handle c4-resize-handle" data-id="${boundary.id}" data-kind="boundary" data-drag-mode="resize" cx="${boundary.x + boundary.width}" cy="${boundary.y + boundary.height}" r="8" />` +
+          `</g>`
+        );
+      });
+
+      state.c4.relationships.forEach((relationship) => {
+        const route = relationshipLayout.get(relationship.id);
+        if (!route) return;
+        groups.push(
+          `<g class="svg-item" data-id="${relationship.id}" data-kind="relationship">` +
+          `<path class="c4-relationship-hit" data-id="${relationship.id}" data-kind="relationship" d="${route.path}" fill="none" stroke="transparent" stroke-width="18" />` +
+          `<path d="${route.path}" fill="none" stroke="#0f172a" stroke-width="2.2" stroke-linecap="round" marker-end="url(#c4-arrow)" />` +
+          `<rect x="${route.labelBox.x}" y="${route.labelBox.y}" width="${route.labelBox.width}" height="${route.labelBox.height}" rx="10" fill="#ffffff" fill-opacity="0.92" stroke="#dbe3ee" />` +
+          `<text class="editable c4-editable" data-id="${relationship.id}" data-kind="relationship" data-field="label" x="${route.labelPoint.x}" y="${route.labelBox.y + 15}" text-anchor="middle" font-size="13" fill="#0f172a">${esc(relationship.label || "Uses")}</text>` +
+          `${relationship.technology ? `<text x="${route.labelPoint.x}" y="${route.labelBox.y + 29}" text-anchor="middle" font-size="11" fill="#475569">${esc(relationship.technology)}</text>` : ""}` +
+          `</g>`
+        );
+      });
+
+      state.c4.nodes.forEach((node) => {
+        const box = c4NodeBox(node);
+        const palette = c4NodePalette(node.kind);
+        const icon = c4NodeIconSvg(node, box);
+        const subtitle = node.technology || node.description || capitalize(node.kind);
+        groups.push(
+          `<g class="svg-item" data-id="${node.id}" data-kind="node">` +
+          `${c4NodeShapeSvg(node, box, palette)}` +
+          `<g pointer-events="none">${icon}</g>` +
+          `<text class="editable c4-editable" data-id="${node.id}" data-kind="node" data-field="name" x="${box.x + 54}" y="${box.y + 34}" font-size="18" font-weight="700" fill="#0f172a">${esc(node.name)}</text>` +
+          `<text x="${box.x + 54}" y="${box.y + 56}" font-size="12" fill="#475569">${esc(subtitle)}</text>` +
+          `<rect class="drag-handle" data-id="${node.id}" data-kind="node" data-drag-mode="move" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" rx="18" fill="transparent" stroke="transparent" />` +
+          `</g>`
+        );
+      });
+
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#ffffff;border-radius:8px">
+        ${c4SvgDefs()}
+        <g opacity="0.35">
+          ${buildC4Grid(width, height)}
+        </g>
+        ${groups.join("")}
+      </svg>`;
+    }
+
+    function buildC4Grid(width, height) {
+      const lines = [];
+      for (let x = 0; x <= width; x += 40) {
+        lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${height}" stroke="#e2e8f0" stroke-width="1" />`);
+      }
+      for (let y = 0; y <= height; y += 40) {
+        lines.push(`<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#e2e8f0" stroke-width="1" />`);
+      }
+      return lines.join("");
+    }
+
+    function c4SvgDefs() {
+      return `
+        <defs>
+          <marker id="c4-arrow" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+            <path d="M0,0 L12,4 L0,8 z" fill="#0f172a" />
+          </marker>
+        </defs>
+      `;
+    }
+
+    function c4NodeBox(node) {
+      const size = c4NodeSize(node.kind);
+      return {
+        x: Number(node.x) || 0,
+        y: Number(node.y) || 0,
+        width: size.width,
+        height: size.height
+      };
+    }
+
+    function c4NodeSize(kind) {
+      if (kind === "person") return { width: 210, height: 90 };
+      if (kind === "database") return { width: 220, height: 104 };
+      return { width: 230, height: 96 };
+    }
+
+    function c4NodePalette(kind) {
+      if (kind === "person") return { fill: "#f8fafc", stroke: "#0f172a", accent: "#cbd5e1" };
+      if (kind === "system") return { fill: "#eff6ff", stroke: "#2563eb", accent: "#dbeafe" };
+      if (kind === "database") return { fill: "#faf5ff", stroke: "#7c3aed", accent: "#ede9fe" };
+      return { fill: "#ecfeff", stroke: "#0f766e", accent: "#ccfbf1" };
+    }
+
+    function c4BoundaryTint(kind) {
+      if (kind === "container") return { fill: "#f0fdf4", stroke: "#16a34a" };
+      if (kind === "enterprise") return { fill: "#fff7ed", stroke: "#ea580c" };
+      if (kind === "boundary") return { fill: "#f8fafc", stroke: "#475569" };
+      return { fill: "#eff6ff", stroke: "#2563eb" };
+    }
+
+    function c4NodeShapeSvg(node, box, palette) {
+      if (node.kind === "database") {
+        const cx = box.x + box.width / 2;
+        return `
+          <g>
+            <ellipse cx="${cx}" cy="${box.y + 16}" rx="${box.width / 2}" ry="16" fill="${palette.fill}" stroke="${palette.stroke}" stroke-width="2.2" />
+            <path d="M${box.x} ${box.y + 16} L${box.x} ${box.y + box.height - 16} C${box.x} ${box.y + box.height} ${box.x + box.width} ${box.y + box.height} ${box.x + box.width} ${box.y + box.height - 16} L${box.x + box.width} ${box.y + 16}" fill="${palette.fill}" stroke="${palette.stroke}" stroke-width="2.2" />
+            <ellipse cx="${cx}" cy="${box.y + box.height - 16}" rx="${box.width / 2}" ry="16" fill="${palette.fill}" stroke="${palette.stroke}" stroke-width="2.2" />
+            <rect x="${box.x}" y="${box.y + 18}" width="${box.width}" height="${box.height - 36}" fill="${palette.fill}" stroke="none" />
+          </g>
+        `;
+      }
+
+      return `<rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" rx="18" fill="${palette.fill}" stroke="${palette.stroke}" stroke-width="2.2" />`;
+    }
+
+    function c4NodeIconSvg(node, box) {
+      const left = box.x + 18;
+      const top = box.y + 20;
+      const palette = c4NodePalette(node.kind);
+      if (node.kind === "person") {
+        return `
+          <circle cx="${left + 12}" cy="${top + 6}" r="8" fill="none" stroke="${palette.stroke}" stroke-width="2" />
+          <line x1="${left + 12}" y1="${top + 14}" x2="${left + 12}" y2="${top + 40}" stroke="${palette.stroke}" stroke-width="2" />
+          <line x1="${left}" y1="${top + 23}" x2="${left + 24}" y2="${top + 23}" stroke="${palette.stroke}" stroke-width="2" />
+          <line x1="${left + 12}" y1="${top + 40}" x2="${left + 3}" y2="${top + 54}" stroke="${palette.stroke}" stroke-width="2" />
+          <line x1="${left + 12}" y1="${top + 40}" x2="${left + 21}" y2="${top + 54}" stroke="${palette.stroke}" stroke-width="2" />
+        `;
+      }
+
+      return `
+        <rect x="${left}" y="${top}" width="24" height="24" rx="7" fill="${palette.accent}" stroke="${palette.stroke}" stroke-width="1.6" />
+        <text x="${left + 12}" y="${top + 16}" text-anchor="middle" font-size="11" font-weight="700" fill="${palette.stroke}">
+          ${esc(node.kind === "database" ? "DB" : node.kind === "system" ? "SYS" : "APP")}
+        </text>
+      `;
+    }
+
+    function buildC4RelationshipLayout() {
+      const nodeBoxes = new Map(state.c4.nodes.map((node) => [node.id, c4NodeBox(node)]));
+      const relMeta = new Map();
+      const endpointGroups = new Map();
+      const pairGroups = new Map();
+
+      state.c4.relationships.forEach((relationship) => {
+        const fromBox = nodeBoxes.get(relationship.fromId);
+        const toBox = nodeBoxes.get(relationship.toId);
+        if (!fromBox || !toBox) return;
+
+        const fromCenter = { x: fromBox.x + fromBox.width / 2, y: fromBox.y + fromBox.height / 2 };
+        const toCenter = { x: toBox.x + toBox.width / 2, y: toBox.y + toBox.height / 2 };
+        const dx = toCenter.x - fromCenter.x;
+        const dy = toCenter.y - fromCenter.y;
+        const horizontal = Math.abs(dx) >= Math.abs(dy);
+        const fromSide = horizontal ? (dx >= 0 ? "right" : "left") : (dy >= 0 ? "bottom" : "top");
+        const toSide = horizontal ? (dx >= 0 ? "left" : "right") : (dy >= 0 ? "top" : "bottom");
+
+        relMeta.set(relationship.id, { fromBox, toBox, fromCenter, toCenter, fromSide, toSide });
+        pushC4EndpointGroup(endpointGroups, relationship.id, relationship.fromId, fromSide, "from", toCenter);
+        pushC4EndpointGroup(endpointGroups, relationship.id, relationship.toId, toSide, "to", fromCenter);
+
+        const pairKey = [relationship.fromId, relationship.toId].sort().join("::");
+        if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
+        pairGroups.get(pairKey).push(relationship.id);
+      });
+
+      const anchorMap = new Map();
+      endpointGroups.forEach((entries, key) => {
+        const [nodeId, side] = key.split(":");
+        const box = nodeBoxes.get(nodeId);
+        if (!box) return;
+        entries.sort((a, b) => compareC4EndpointEntries(a, b, side));
+        const count = entries.length;
+        entries.forEach((entry, index) => {
+          anchorMap.set(entry.relationshipId + ":" + entry.endpoint, c4AnchorForSide(box, side, index, count));
+        });
+      });
+
+      const pairOffsetMap = new Map();
+      pairGroups.forEach((ids) => {
+        ids.sort((a, b) => a.localeCompare(b));
+        ids.forEach((id, index) => {
+          pairOffsetMap.set(id, (index - (ids.length - 1) / 2) * 26);
+        });
+      });
+
+      const routes = new Map();
+      state.c4.relationships.forEach((relationship) => {
+        const start = anchorMap.get(relationship.id + ":from");
+        const end = anchorMap.get(relationship.id + ":to");
+        if (!start || !end) return;
+
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const pairOffset = pairOffsetMap.get(relationship.id) || 0;
+        const control = {
+          x: (start.x + end.x) / 2 + nx * pairOffset,
+          y: (start.y + end.y) / 2 + ny * pairOffset
+        };
+        const labelPoint = quadraticPoint(start, control, end, 0.5);
+        const labelLines = [relationship.label || "Uses"];
+        if (relationship.technology) labelLines.push(relationship.technology);
+        const labelWidth = Math.min(280, Math.max(...labelLines.map((line) => Math.max(72, String(line || "").length * 7 + 18))));
+        const labelHeight = labelLines.length > 1 ? 36 : 20;
+
+        routes.set(relationship.id, {
+          path: `M ${round2(start.x)} ${round2(start.y)} Q ${round2(control.x)} ${round2(control.y)} ${round2(end.x)} ${round2(end.y)}`,
+          labelPoint,
+          labelBox: {
+            x: round2(labelPoint.x - labelWidth / 2),
+            y: round2(labelPoint.y - (labelLines.length > 1 ? 22 : 14)),
+            width: round2(labelWidth),
+            height: round2(labelHeight)
+          }
+        });
+      });
+
+      return routes;
+    }
+
+    function pushC4EndpointGroup(groups, relationshipId, nodeId, side, endpoint, otherCenter) {
+      const key = nodeId + ":" + side;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ relationshipId, endpoint, otherCenter });
+    }
+
+    function compareC4EndpointEntries(a, b, side) {
+      if (side === "left" || side === "right") {
+        return a.otherCenter.y - b.otherCenter.y || a.otherCenter.x - b.otherCenter.x;
+      }
+      return a.otherCenter.x - b.otherCenter.x || a.otherCenter.y - b.otherCenter.y;
+    }
+
+    function c4AnchorForSide(box, side, index, count) {
+      const slot = (index + 1) / (count + 1);
+      if (side === "left") {
+        return { x: box.x, y: box.y + box.height * slot };
+      }
+      if (side === "right") {
+        return { x: box.x + box.width, y: box.y + box.height * slot };
+      }
+      if (side === "top") {
+        return { x: box.x + box.width * slot, y: box.y };
+      }
+      return { x: box.x + box.width * slot, y: box.y + box.height };
+    }
+
+    function quadraticPoint(start, control, end, t) {
+      const oneMinusT = 1 - t;
+      return {
+        x: oneMinusT * oneMinusT * start.x + 2 * oneMinusT * t * control.x + t * t * end.x,
+        y: oneMinusT * oneMinusT * start.y + 2 * oneMinusT * t * control.y + t * t * end.y
+      };
+    }
+
+    function round2(value) {
+      return Math.round(Number(value) * 100) / 100;
+    }
+
+    function bindC4SvgInteractions() {
+      c4PreviewCanvas.querySelectorAll("[data-id]").forEach((node) => {
+        node.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const id = node.getAttribute("data-id");
+          const kind = node.getAttribute("data-kind");
+          state.c4.selection = { kind, id };
+          refreshC4SelectionUi();
+        });
+      });
+
+      c4PreviewCanvas.querySelectorAll(".c4-editable").forEach((node) => {
+        node.addEventListener("dblclick", (event) => {
+          event.stopPropagation();
+          startC4InlineEdit(event.currentTarget);
+        });
+      });
+
+      c4PreviewCanvas.querySelectorAll(".drag-handle").forEach((node) => {
+        node.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          const id = node.getAttribute("data-id");
+          const kind = node.getAttribute("data-kind");
+          if (kind !== "node" && kind !== "boundary") return;
+          event.preventDefault();
+          removeInlineEditor();
+          const point = toC4SvgPoint(event.clientX, event.clientY);
+          const item = c4FindBySelection({ kind, id });
+          if (!point || !item) return;
+          const mode = node.getAttribute("data-drag-mode") || "move";
+          const box = kind === "boundary" ? { x: item.x, y: item.y } : c4NodeBox(item);
+          state.c4.drag = {
+            kind,
+            id,
+            mode,
+            startX: event.clientX,
+            startY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
+            offsetX: point.x - box.x,
+            offsetY: point.y - box.y
+          };
+          state.c4.selection = { kind, id };
+          refreshC4SelectionUi();
+        });
+      });
+
+      c4PreviewCanvas.querySelector("svg")?.addEventListener("click", () => {
+        closeContextMenu();
+      });
+    }
+
+    function refreshC4SelectionUi() {
+      renderC4Items();
+      renderC4Props();
+      highlightC4SelectionInSvg();
+    }
+
+    function highlightC4SelectionInSvg() {
+      c4PreviewCanvas.querySelectorAll(".svg-item").forEach((node) => {
+        const selected = state.c4.selection && node.getAttribute("data-id") === state.c4.selection.id;
+        node.classList.toggle("selected", Boolean(selected));
+      });
+    }
+
+    function renderC4Items() {
+      c4ItemsList.innerHTML = "";
+      c4ItemsSummary.textContent = state.c4.nodes.length + " nodes, " + state.c4.relationships.length + " relationships, " + state.c4.boundaries.length + " boundaries.";
+
+      const rows = [
+        ...state.c4.boundaries.map((boundary) => ({ kind: "boundary", id: boundary.id, label: "Boundary: " + boundary.name })),
+        ...state.c4.nodes.map((node) => ({ kind: "node", id: node.id, label: (node.boundaryId ? "  " : "") + capitalize(node.kind) + ": " + node.name })),
+        ...state.c4.relationships.map((relationship) => ({
+          kind: "relationship",
+          id: relationship.id,
+          label: "Rel: " + findC4NodeName(relationship.fromId) + " -> " + findC4NodeName(relationship.toId) + (relationship.label ? " (" + relationship.label + ")" : "")
+        }))
+      ];
+
+      rows.forEach((row) => {
+        const div = document.createElement("div");
+        div.className = "item-row" + (state.c4.selection && state.c4.selection.id === row.id ? " active" : "");
+        div.textContent = row.label;
+        div.addEventListener("click", () => {
+          state.c4.selection = { kind: row.kind, id: row.id };
+          renderC4();
+        });
+        c4ItemsList.appendChild(div);
+      });
+    }
+
+    function renderC4Props() {
+      if (!state.c4.selection) {
+        c4PropsForm.hidden = true;
+        c4PropsEmpty.hidden = false;
+        btnC4DeleteItem.hidden = true;
+        c4PropsHint.textContent = "";
+        return;
+      }
+
+      const item = c4FindBySelection(state.c4.selection);
+      if (!item) {
+        c4PropsForm.hidden = true;
+        c4PropsEmpty.hidden = false;
+        btnC4DeleteItem.hidden = true;
+        c4PropsHint.textContent = "";
+        return;
+      }
+
+      c4PropsForm.hidden = false;
+      c4PropsEmpty.hidden = true;
+      btnC4DeleteItem.hidden = false;
+      btnC4DeleteItem.textContent = "Delete " + capitalize(state.c4.selection.kind);
+
+      setField(c4FieldName, false);
+      setField(c4FieldType, false);
+      setField(c4FieldDescription, false);
+      setField(c4FieldTechnology, false);
+      setField(c4FieldBoundary, false);
+      setField(c4FieldFrom, false);
+      setField(c4FieldTo, false);
+      setField(c4FieldWidth, false);
+      setField(c4FieldHeight, false);
+
+      if (state.c4.selection.kind === "node") {
+        setField(c4FieldName, true);
+        setField(c4FieldType, true);
+        setField(c4FieldDescription, true);
+        setField(c4FieldTechnology, true);
+        setField(c4FieldBoundary, true);
+        c4PropName.value = item.name || "";
+        fillSelect(c4PropType, C4_NODE_TYPES, item.kind);
+        c4PropDescription.value = item.description || "";
+        c4PropTechnology.value = item.technology || "";
+        fillC4BoundarySelect(c4PropBoundary, item.boundaryId, null);
+        c4PropsHint.textContent = "C4 node properties";
+        return;
+      }
+
+      if (state.c4.selection.kind === "boundary") {
+        setField(c4FieldName, true);
+        setField(c4FieldType, true);
+        setField(c4FieldBoundary, true);
+        setField(c4FieldWidth, true);
+        setField(c4FieldHeight, true);
+        c4PropName.value = item.name || "";
+        fillSelect(c4PropType, C4_BOUNDARY_TYPES, item.kind);
+        fillC4BoundarySelect(c4PropBoundary, item.parentId, item.id);
+        c4PropWidth.value = Math.round(item.width || 360);
+        c4PropHeight.value = Math.round(item.height || 240);
+        c4PropsHint.textContent = "Boundary properties";
+        return;
+      }
+
+      setField(c4FieldName, true);
+      setField(c4FieldTechnology, true);
+      setField(c4FieldFrom, true);
+      setField(c4FieldTo, true);
+      c4PropName.value = item.label || "";
+      c4PropTechnology.value = item.technology || "";
+      fillC4NodeSelect(c4PropFrom, item.fromId);
+      fillC4NodeSelect(c4PropTo, item.toId);
+      c4PropsHint.textContent = "Relationship properties";
+    }
+
+    function applyC4Props() {
+      if (!state.c4.selection) return;
+      const item = c4FindBySelection(state.c4.selection);
+      if (!item) return;
+
+      if (state.c4.selection.kind === "node") {
+        item.name = c4PropName.value || item.name;
+        item.kind = c4PropType.value || item.kind;
+        item.description = c4PropDescription.value || "";
+        item.technology = c4PropTechnology.value || "";
+        item.boundaryId = c4PropBoundary.value || null;
+      } else if (state.c4.selection.kind === "boundary") {
+        item.name = c4PropName.value || item.name;
+        item.kind = c4PropType.value || item.kind;
+        const nextParentId = c4PropBoundary.value || null;
+        if (!wouldCreateC4BoundaryCycle(item.id, nextParentId)) item.parentId = nextParentId;
+        item.width = clamp(Number(c4PropWidth.value) || 360, 160, 4000);
+        item.height = clamp(Number(c4PropHeight.value) || 240, 120, 4000);
+      } else if (state.c4.selection.kind === "relationship") {
+        item.label = c4PropName.value || "";
+        item.technology = c4PropTechnology.value || "";
+        item.fromId = c4PropFrom.value || item.fromId;
+        item.toId = c4PropTo.value || item.toId;
+      }
+
+      renderC4();
+    }
+
+    function startC4InlineEdit(target) {
+      const id = target.getAttribute("data-id");
+      const kind = target.getAttribute("data-kind");
+      const field = target.getAttribute("data-field");
+      const item = c4FindBySelection({ kind, id });
+      if (!item || !field) return;
+
+      removeInlineEditor();
+
+      const bbox = target.getBoundingClientRect();
+      const wrapBox = c4CanvasWrap.getBoundingClientRect();
+      const editor = document.createElement("input");
+      editor.className = "inline-editor";
+      editor.value = item[field] || "";
+      editor.style.left = (bbox.left - wrapBox.left + c4CanvasWrap.scrollLeft) + "px";
+      editor.style.top = (bbox.top - wrapBox.top + c4CanvasWrap.scrollTop - 4) + "px";
+      c4CanvasWrap.appendChild(editor);
+      editor.focus();
+      editor.select();
+
+      const commit = () => {
+        const current = c4FindBySelection({ kind, id });
+        if (current) current[field] = editor.value.trim() || current[field];
+        removeInlineEditor();
+        renderC4();
+      };
+
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") commit();
+        if (event.key === "Escape") {
+          removeInlineEditor();
+          renderC4();
+        }
+      });
+      editor.addEventListener("blur", commit);
+    }
+
+    function applyC4Drop(drag, clientX, clientY) {
+      const point = toC4SvgPoint(clientX, clientY);
+      if (!point) return;
+      const item = c4FindBySelection({ kind: drag.kind, id: drag.id });
+      if (!item) return;
+
+      if (drag.kind === "node") {
+        item.x = Math.max(20, point.x - (drag.offsetX || 0));
+        item.y = Math.max(20, point.y - (drag.offsetY || 0));
+      } else if (drag.kind === "boundary") {
+        if (drag.mode === "resize") {
+          item.width = clamp(point.x - item.x, 160, 5000);
+          item.height = clamp(point.y - item.y, 120, 5000);
+        } else {
+          item.x = Math.max(10, point.x - (drag.offsetX || 0));
+          item.y = Math.max(10, point.y - (drag.offsetY || 0));
+        }
+      }
+
+      state.c4.selection = { kind: drag.kind, id: drag.id };
+      renderC4();
+    }
+
+    function deleteC4Selection(selection) {
+      if (!selection) return false;
+
+      if (selection.kind === "node") {
+        const nextNodes = state.c4.nodes.filter((node) => node.id !== selection.id);
+        if (nextNodes.length === state.c4.nodes.length) return false;
+        state.c4.nodes = nextNodes;
+        state.c4.relationships = state.c4.relationships.filter((rel) => rel.fromId !== selection.id && rel.toId !== selection.id);
+      } else if (selection.kind === "boundary") {
+        const nextBoundaries = state.c4.boundaries.filter((boundary) => boundary.id !== selection.id);
+        if (nextBoundaries.length === state.c4.boundaries.length) return false;
+        state.c4.boundaries = nextBoundaries;
+        state.c4.nodes.forEach((node) => {
+          if (node.boundaryId === selection.id) node.boundaryId = null;
+        });
+        state.c4.boundaries.forEach((boundary) => {
+          if (boundary.parentId === selection.id) boundary.parentId = null;
+        });
+      } else if (selection.kind === "relationship") {
+        const nextRelationships = state.c4.relationships.filter((relationship) => relationship.id !== selection.id);
+        if (nextRelationships.length === state.c4.relationships.length) return false;
+        state.c4.relationships = nextRelationships;
+      } else {
+        return false;
+      }
+
+      state.c4.selection = null;
+      return true;
+    }
+
+    function c4FindBySelection(selection) {
+      if (!selection) return null;
+      if (selection.kind === "node") return state.c4.nodes.find((node) => node.id === selection.id) || null;
+      if (selection.kind === "boundary") return state.c4.boundaries.find((boundary) => boundary.id === selection.id) || null;
+      if (selection.kind === "relationship") return state.c4.relationships.find((relationship) => relationship.id === selection.id) || null;
+      return null;
+    }
+
+    function findC4NodeName(id) {
+      return state.c4.nodes.find((node) => node.id === id)?.name || "";
+    }
+
+    function fillC4BoundarySelect(selectNode, selectedId, excludeId) {
+      selectNode.innerHTML = "";
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "None";
+      selectNode.appendChild(none);
+
+      state.c4.boundaries
+        .filter((boundary) => boundary.id !== excludeId)
+        .forEach((boundary) => {
+          const option = document.createElement("option");
+          option.value = boundary.id;
+          option.textContent = boundary.name;
+          selectNode.appendChild(option);
+        });
+
+      selectNode.value = selectedId || "";
+    }
+
+    function fillC4NodeSelect(selectNode, selectedId) {
+      selectNode.innerHTML = "";
+      state.c4.nodes.forEach((node) => {
+        const option = document.createElement("option");
+        option.value = node.id;
+        option.textContent = node.name;
+        selectNode.appendChild(option);
+      });
+      selectNode.value = selectedId || state.c4.nodes[0]?.id || "";
+    }
+
+    function wouldCreateC4BoundaryCycle(boundaryId, parentId) {
+      let currentId = parentId;
+      while (currentId) {
+        if (currentId === boundaryId) return true;
+        currentId = state.c4.boundaries.find((boundary) => boundary.id === currentId)?.parentId || null;
+      }
+      return false;
+    }
+
+    function autoLayoutC4() {
+      const rootBoundaries = state.c4.boundaries.filter((boundary) => !boundary.parentId);
+      let cursorX = 60;
+
+      rootBoundaries.forEach((boundary) => {
+        const boundaryNodes = state.c4.nodes.filter((node) => node.boundaryId === boundary.id);
+        const cols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(Math.max(1, boundaryNodes.length)))));
+        boundaryNodes.forEach((node, index) => {
+          const col = index % cols;
+          const row = Math.floor(index / cols);
+          node.x = cursorX + 36 + col * 250;
+          node.y = boundary.y + 80 + row * 150;
+        });
+        const rows = Math.max(1, Math.ceil(Math.max(1, boundaryNodes.length) / cols));
+        boundary.x = cursorX;
+        boundary.y = 60;
+        boundary.width = Math.max(320, 80 + cols * 250);
+        boundary.height = Math.max(220, 120 + rows * 150);
+        cursorX += boundary.width + 60;
+      });
+
+      const unboundedNodes = state.c4.nodes.filter((node) => !node.boundaryId);
+      const baseY = rootBoundaries.length
+        ? rootBoundaries.reduce((max, boundary) => Math.max(max, boundary.y + boundary.height), 0) + 70
+        : 110;
+
+      unboundedNodes.forEach((node, index) => {
+        const col = index % 3;
+        const row = Math.floor(index / 3);
+        node.x = 80 + col * 270;
+        node.y = baseY + row * 150;
+      });
+    }
+
+    function syncC4TextFromModel() {
+      c4SourceText.value = serializeC4Diagram();
+    }
+
+    function serializeC4Diagram() {
+      normalizeC4State();
+      const lines = [
+        "@startuml",
+        "!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
+        "LAYOUT_WITH_LEGEND()",
+        ""
+      ];
+
+      const boundariesByParent = new Map();
+      state.c4.boundaries.forEach((boundary) => {
+        const key = boundary.parentId || "__root__";
+        if (!boundariesByParent.has(key)) boundariesByParent.set(key, []);
+        boundariesByParent.get(key).push(boundary);
+      });
+
+      const nodesByBoundary = new Map();
+      state.c4.nodes.forEach((node) => {
+        const key = node.boundaryId || "__root__";
+        if (!nodesByBoundary.has(key)) nodesByBoundary.set(key, []);
+        nodesByBoundary.get(key).push(node);
+      });
+
+      const emitNode = (node, level) => {
+        lines.push(indent(level) + c4NodeDeclaration(node));
+        lines.push(indent(level) + `' pos ${node.alias} ${Math.round(node.x)} ${Math.round(node.y)}`);
+      };
+
+      const emitBoundary = (boundary, level) => {
+        lines.push(indent(level) + `${c4BoundaryMacro(boundary.kind)}(${boundary.alias}, ${c4String(boundary.name)}) {`);
+        lines.push(indent(level + 1) + `' boundary-pos ${boundary.alias} ${Math.round(boundary.x)} ${Math.round(boundary.y)} ${Math.round(boundary.width)} ${Math.round(boundary.height)}`);
+        (nodesByBoundary.get(boundary.id) || []).forEach((node) => emitNode(node, level + 1));
+        (boundariesByParent.get(boundary.id) || []).forEach((child) => emitBoundary(child, level + 1));
+        lines.push(indent(level) + "}");
+      };
+
+      (nodesByBoundary.get("__root__") || []).forEach((node) => emitNode(node, 0));
+      if ((nodesByBoundary.get("__root__") || []).length) lines.push("");
+      (boundariesByParent.get("__root__") || []).forEach((boundary) => emitBoundary(boundary, 0));
+
+      if (state.c4.relationships.length) lines.push("");
+      state.c4.relationships.forEach((relationship) => {
+        const from = state.c4.nodes.find((node) => node.id === relationship.fromId);
+        const to = state.c4.nodes.find((node) => node.id === relationship.toId);
+        if (!from || !to) return;
+        const args = [from.alias, to.alias, c4String(relationship.label || "Uses")];
+        if (relationship.technology) args.push(c4String(relationship.technology));
+        lines.push(`Rel(${args.join(", ")})`);
+      });
+
+      lines.push("@enduml");
+      return lines.join("\n");
+    }
+
+    function c4NodeDeclaration(node) {
+      if (node.kind === "person") {
+        return `Person(${node.alias}, ${c4String(node.name)}, ${c4String(node.description || "")})`;
+      }
+      if (node.kind === "system") {
+        return `System(${node.alias}, ${c4String(node.name)}, ${c4String(node.description || "")})`;
+      }
+      if (node.kind === "database") {
+        return `ContainerDb(${node.alias}, ${c4String(node.name)}, ${c4String(node.technology || "")}, ${c4String(node.description || "")})`;
+      }
+      return `Container(${node.alias}, ${c4String(node.name)}, ${c4String(node.technology || "")}, ${c4String(node.description || "")})`;
+    }
+
+    function applyC4Text(source) {
+      const parsed = parseC4Text(source);
+      state.c4.nodes = parsed.nodes;
+      state.c4.boundaries = parsed.boundaries;
+      state.c4.relationships = parsed.relationships;
+      state.c4.selection = null;
+      normalizeC4State();
+      renderC4();
+    }
+
+    function parseC4Text(source) {
+      const nodes = [];
+      const boundaries = [];
+      const relationships = [];
+      const aliasToNodeId = new Map();
+      const aliasToBoundaryId = new Map();
+      const boundaryStack = [];
+      const pendingNodePos = new Map();
+      const pendingBoundaryPos = new Map();
+
+      const applyPendingNodePos = (node) => {
+        const pending = pendingNodePos.get(node.alias);
+        if (!pending) return;
+        node.x = pending.x;
+        node.y = pending.y;
+        pendingNodePos.delete(node.alias);
+      };
+
+      const applyPendingBoundaryPos = (boundary) => {
+        const pending = pendingBoundaryPos.get(boundary.alias);
+        if (!pending) return;
+        boundary.x = pending.x;
+        boundary.y = pending.y;
+        boundary.width = pending.width;
+        boundary.height = pending.height;
+        pendingBoundaryPos.delete(boundary.alias);
+      };
+
+      source.split(/\r?\n/).forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (!line || line === "@startuml" || line === "@enduml") return;
+        if (line.startsWith("!include") || line.startsWith("LAYOUT_") || line.startsWith("title ")) return;
+
+        const nodePosMatch = line.match(/^'\s*pos\s+([A-Za-z_][\w.-]*)\s+(-?\d+)\s+(-?\d+)$/i);
+        if (nodePosMatch) {
+          const alias = nodePosMatch[1];
+          const targetNode = nodes.find((node) => node.alias === alias);
+          const nextPos = { x: Number(nodePosMatch[2]), y: Number(nodePosMatch[3]) };
+          if (targetNode) {
+            targetNode.x = nextPos.x;
+            targetNode.y = nextPos.y;
+          } else {
+            pendingNodePos.set(alias, nextPos);
+          }
+          return;
+        }
+
+        const boundaryPosMatch = line.match(/^'\s*boundary-pos\s+([A-Za-z_][\w.-]*)\s+(-?\d+)\s+(-?\d+)\s+(\d+)\s+(\d+)$/i);
+        if (boundaryPosMatch) {
+          const alias = boundaryPosMatch[1];
+          const targetBoundary = boundaries.find((boundary) => boundary.alias === alias);
+          const nextPos = {
+            x: Number(boundaryPosMatch[2]),
+            y: Number(boundaryPosMatch[3]),
+            width: Number(boundaryPosMatch[4]),
+            height: Number(boundaryPosMatch[5])
+          };
+          if (targetBoundary) {
+            targetBoundary.x = nextPos.x;
+            targetBoundary.y = nextPos.y;
+            targetBoundary.width = nextPos.width;
+            targetBoundary.height = nextPos.height;
+          } else {
+            pendingBoundaryPos.set(alias, nextPos);
+          }
+          return;
+        }
+
+        if (line === "}") {
+          boundaryStack.pop();
+          return;
+        }
+
+        const boundaryMatch = line.match(/^(System_Boundary|Container_Boundary|Enterprise_Boundary|Boundary)\((.*)\)\s*\{$/i);
+        if (boundaryMatch) {
+          const args = splitC4Args(boundaryMatch[2]);
+          const alias = c4SanitizeAlias(unquotePlantToken(args[0] || "boundary"));
+          const boundary = {
+            id: "cb" + (boundaries.length + 1),
+            alias,
+            name: unquotePlantToken(args[1] || args[0] || "Boundary"),
+            kind: c4BoundaryKindFromMacro(boundaryMatch[1]),
+            x: 60,
+            y: 60 + boundaries.length * 24,
+            width: 360,
+            height: 240,
+            parentId: boundaryStack[boundaryStack.length - 1]?.id || null
+          };
+          boundaries.push(boundary);
+          aliasToBoundaryId.set(alias, boundary.id);
+          boundaryStack.push(boundary);
+          applyPendingBoundaryPos(boundary);
+          return;
+        }
+
+        const nodeMatch = line.match(/^(Person|Person_Ext|System|System_Ext|Container|ContainerDb|SystemDb|Component|ComponentDb)\((.*)\)\s*$/i);
+        if (nodeMatch) {
+          const args = splitC4Args(nodeMatch[2]);
+          const alias = c4SanitizeAlias(unquotePlantToken(args[0] || "node"));
+          const kind = c4NodeKindFromMacro(nodeMatch[1]);
+          const node = {
+            id: "cn" + (nodes.length + 1),
+            alias,
+            name: unquotePlantToken(args[1] || args[0] || "Element"),
+            kind,
+            description: "",
+            technology: "",
+            x: 80 + (nodes.length % 3) * 260,
+            y: 100 + Math.floor(nodes.length / 3) * 150,
+            boundaryId: boundaryStack[boundaryStack.length - 1]?.id || null
+          };
+
+          if (kind === "container" || kind === "database") {
+            node.technology = unquotePlantToken(args[2] || "");
+            node.description = unquotePlantToken(args[3] || "");
+          } else {
+            node.description = unquotePlantToken(args[2] || "");
+          }
+
+          nodes.push(node);
+          aliasToNodeId.set(alias, node.id);
+          applyPendingNodePos(node);
+          return;
+        }
+
+        const relMatch = line.match(/^Rel(?:_[LRUD])?\((.*)\)\s*$/i);
+        if (relMatch) {
+          const args = splitC4Args(relMatch[1]);
+          const fromAlias = c4SanitizeAlias(unquotePlantToken(args[0] || ""));
+          const toAlias = c4SanitizeAlias(unquotePlantToken(args[1] || ""));
+          const fromId = aliasToNodeId.get(fromAlias);
+          const toId = aliasToNodeId.get(toAlias);
+          if (!fromId || !toId) return;
+          relationships.push({
+            id: "cr" + (relationships.length + 1),
+            fromId,
+            toId,
+            label: unquotePlantToken(args[2] || ""),
+            technology: unquotePlantToken(args[3] || "")
+          });
+        }
+      });
+
+      return { nodes, boundaries, relationships };
+    }
+
+    function splitC4Args(value) {
+      const parts = [];
+      let current = "";
+      let inQuote = false;
+      let depth = 0;
+
+      for (let index = 0; index < value.length; index += 1) {
+        const char = value[index];
+        if (char === "\"" && value[index - 1] !== "\\") {
+          inQuote = !inQuote;
+          current += char;
+          continue;
+        }
+        if (!inQuote && (char === "(" || char === "[" || char === "{")) depth += 1;
+        if (!inQuote && (char === ")" || char === "]" || char === "}")) depth = Math.max(0, depth - 1);
+        if (!inQuote && depth === 0 && char === ",") {
+          parts.push(current.trim());
+          current = "";
+          continue;
+        }
+        current += char;
+      }
+
+      if (current.trim()) parts.push(current.trim());
+      return parts;
+    }
+
+    function selectC4FromTextCaret() {
+      const cursor = c4SourceText.selectionStart || 0;
+      const line = c4SourceText.value.slice(0, cursor).split("\n").pop() || "";
+      const selection = selectionFromC4Line(line.trim());
+      if (!selection) return;
+      state.c4.selection = selection;
+      renderC4();
+    }
+
+    function selectionFromC4Line(line) {
+      if (!line) return null;
+
+      const boundaryMatch = line.match(/^(System_Boundary|Container_Boundary|Enterprise_Boundary|Boundary)\((.*)\)\s*\{$/i);
+      if (boundaryMatch) {
+        const alias = c4SanitizeAlias(unquotePlantToken(splitC4Args(boundaryMatch[2])[0] || ""));
+        const boundary = state.c4.boundaries.find((item) => item.alias === alias);
+        if (boundary) return { kind: "boundary", id: boundary.id };
+      }
+
+      const nodeMatch = line.match(/^(Person|Person_Ext|System|System_Ext|Container|ContainerDb|SystemDb|Component|ComponentDb)\((.*)\)\s*$/i);
+      if (nodeMatch) {
+        const alias = c4SanitizeAlias(unquotePlantToken(splitC4Args(nodeMatch[2])[0] || ""));
+        const node = state.c4.nodes.find((item) => item.alias === alias);
+        if (node) return { kind: "node", id: node.id };
+      }
+
+      const relMatch = line.match(/^Rel(?:_[LRUD])?\((.*)\)\s*$/i);
+      if (relMatch) {
+        const args = splitC4Args(relMatch[1]);
+        const fromAlias = c4SanitizeAlias(unquotePlantToken(args[0] || ""));
+        const toAlias = c4SanitizeAlias(unquotePlantToken(args[1] || ""));
+        const fromNode = state.c4.nodes.find((item) => item.alias === fromAlias);
+        const toNode = state.c4.nodes.find((item) => item.alias === toAlias);
+        if (!fromNode || !toNode) return null;
+        const relationship = state.c4.relationships.find((item) => item.fromId === fromNode.id && item.toId === toNode.id);
+        if (relationship) return { kind: "relationship", id: relationship.id };
+      }
+
+      return null;
+    }
+
+    function normalizeC4State() {
+      const localNodes = state.c4.nodes;
+      const localBoundaries = state.c4.boundaries;
+
+      localBoundaries.forEach((boundary, index) => {
+        boundary.kind = C4_BOUNDARY_TYPES.includes(boundary.kind) ? boundary.kind : "system";
+        boundary.name = boundary.name || "Boundary " + (index + 1);
+        boundary.alias = uniqueC4Alias(boundary.alias || boundary.name, localNodes, localBoundaries, boundary.id);
+        if (!Number.isFinite(Number(boundary.x))) boundary.x = 60 + index * 40;
+        if (!Number.isFinite(Number(boundary.y))) boundary.y = 60 + index * 30;
+        boundary.width = clamp(Number(boundary.width) || 360, 160, 5000);
+        boundary.height = clamp(Number(boundary.height) || 240, 120, 5000);
+      });
+
+      localNodes.forEach((node, index) => {
+        node.kind = C4_NODE_TYPES.includes(node.kind) ? node.kind : "container";
+        node.name = node.name || "Node " + (index + 1);
+        node.alias = uniqueC4Alias(node.alias || node.name, localNodes, localBoundaries, node.id);
+        if (!Number.isFinite(Number(node.x))) node.x = nextC4Placement(index).x;
+        if (!Number.isFinite(Number(node.y))) node.y = nextC4Placement(index).y;
+        node.description = node.description || "";
+        node.technology = node.technology || "";
+      });
+
+      const boundaryIds = new Set(localBoundaries.map((boundary) => boundary.id));
+      localNodes.forEach((node) => {
+        if (!boundaryIds.has(node.boundaryId)) node.boundaryId = null;
+      });
+
+      localBoundaries.forEach((boundary) => {
+        if (!boundary.parentId || boundary.parentId === boundary.id || !boundaryIds.has(boundary.parentId) || wouldCreateC4BoundaryCycle(boundary.id, boundary.parentId)) {
+          boundary.parentId = null;
+        }
+      });
+
+      const nodeIds = new Set(localNodes.map((node) => node.id));
+      state.c4.relationships = state.c4.relationships.filter((relationship) => nodeIds.has(relationship.fromId) && nodeIds.has(relationship.toId));
+      expandC4BoundariesToFitContents();
+    }
+
+    function expandC4BoundariesToFitContents() {
+      const byDepth = [...state.c4.boundaries].sort((a, b) => c4BoundaryDepth(b.id) - c4BoundaryDepth(a.id));
+      byDepth.forEach((boundary) => {
+        const nodeBoxes = state.c4.nodes
+          .filter((node) => node.boundaryId === boundary.id)
+          .map((node) => c4NodeBox(node));
+        const childBoxes = state.c4.boundaries
+          .filter((child) => child.parentId === boundary.id)
+          .map((child) => ({ x: child.x, y: child.y, width: child.width, height: child.height }));
+        const allBoxes = [...nodeBoxes, ...childBoxes];
+        if (!allBoxes.length) return;
+
+        const minX = allBoxes.reduce((min, box) => Math.min(min, box.x), Infinity);
+        const minY = allBoxes.reduce((min, box) => Math.min(min, box.y), Infinity);
+        const maxX = allBoxes.reduce((max, box) => Math.max(max, box.x + box.width), -Infinity);
+        const maxY = allBoxes.reduce((max, box) => Math.max(max, box.y + box.height), -Infinity);
+        const targetX = minX - 28;
+        const targetY = minY - 62;
+        boundary.x = Math.min(boundary.x, targetX);
+        boundary.y = Math.min(boundary.y, targetY);
+        boundary.width = Math.max(boundary.width, maxX - boundary.x + 28);
+        boundary.height = Math.max(boundary.height, maxY - boundary.y + 30);
+      });
+    }
+
+    function c4BoundaryDepth(boundaryId) {
+      let depth = 0;
+      let current = state.c4.boundaries.find((boundary) => boundary.id === boundaryId);
+      while (current && current.parentId) {
+        depth += 1;
+        current = state.c4.boundaries.find((boundary) => boundary.id === current.parentId);
+      }
+      return depth;
+    }
+
+    function c4NodeKindFromMacro(macro) {
+      const normalized = String(macro || "").toLowerCase();
+      if (normalized.startsWith("person")) return "person";
+      if (normalized.includes("db")) return "database";
+      if (normalized.startsWith("system")) return "system";
+      return "container";
+    }
+
+    function c4BoundaryKindFromMacro(macro) {
+      const normalized = String(macro || "").toLowerCase();
+      if (normalized.startsWith("container")) return "container";
+      if (normalized.startsWith("enterprise")) return "enterprise";
+      if (normalized === "boundary") return "boundary";
+      return "system";
+    }
+
+    function c4BoundaryMacro(kind) {
+      if (kind === "container") return "Container_Boundary";
+      if (kind === "enterprise") return "Enterprise_Boundary";
+      if (kind === "boundary") return "Boundary";
+      return "System_Boundary";
+    }
+
+    function c4String(value) {
+      return "\"" + String(value || "").replace(/"/g, "\\\"") + "\"";
+    }
+
+    function c4SanitizeAlias(value) {
+      let alias = String(value || "").trim().replace(/[^A-Za-z0-9_]+/g, "_");
+      alias = alias.replace(/^_+/, "").replace(/_+$/, "");
+      if (!alias) alias = "item";
+      if (!/^[A-Za-z_]/.test(alias)) alias = "n_" + alias;
+      return alias;
+    }
+
+    function uniqueC4Alias(seed, nodes = state.c4.nodes, boundaries = state.c4.boundaries, excludeId = null) {
+      const used = new Set();
+      nodes.forEach((node) => {
+        if (node.id !== excludeId && node.alias) used.add(String(node.alias).toLowerCase());
+      });
+      boundaries.forEach((boundary) => {
+        if (boundary.id !== excludeId && boundary.alias) used.add(String(boundary.alias).toLowerCase());
+      });
+
+      const base = c4SanitizeAlias(seed);
+      let alias = base;
+      let counter = 2;
+      while (used.has(alias.toLowerCase())) {
+        alias = base + "_" + counter;
+        counter += 1;
+      }
+      return alias;
+    }
+
+    function toC4SvgPoint(clientX, clientY) {
+      const svg = c4PreviewCanvas.querySelector("svg");
+      if (!svg) return null;
+      const rect = svg.getBoundingClientRect();
+      const viewBox = (svg.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+      const viewWidth = Number.isFinite(viewBox[2]) ? viewBox[2] : Number(svg.getAttribute("width"));
+      const viewHeight = Number.isFinite(viewBox[3]) ? viewBox[3] : Number(svg.getAttribute("height"));
+      if (!rect.width || !rect.height) return null;
+      return {
+        x: ((clientX - rect.left) / rect.width) * viewWidth,
+        y: ((clientY - rect.top) / rect.height) * viewHeight
+      };
+    }
+
+    function buildActiveSvg(options = {}) {
+      if (state.activeTab === "c4") return buildC4Svg(options);
+      return buildSvg(options);
+    }
+
+    function activeDiagramFileName(extension) {
+      const base = state.activeTab === "c4" ? "c4-diagram" : "diagram";
+      return base + "." + extension;
+    }
+
     function exportPng() {
-      exportRaster("image/png", "diagram.png");
+      exportRaster("image/png", activeDiagramFileName("png"));
     }
 
     function exportJpeg() {
-      exportRaster("image/jpeg", "diagram.jpeg", 0.92);
+      exportRaster("image/jpeg", activeDiagramFileName("jpeg"), 0.92);
     }
 
     function exportRaster(mime, name, quality) {
-      const svg = buildSvg({ forExport: true });
+      const svg = buildActiveSvg({ forExport: true });
       const blob = new Blob([svg], { type: "image/svg+xml" });
       const url = URL.createObjectURL(blob);
       const image = new Image();
