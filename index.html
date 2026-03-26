@@ -251,6 +251,22 @@
       gap: 8px;
     }
 
+    .ai-image-meta {
+      min-height: 18px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .ai-image-preview {
+      width: 100%;
+      max-height: 220px;
+      object-fit: contain;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f8fbff 0%, #eef4fb 100%);
+      padding: 6px;
+    }
+
     .ai-status {
       min-height: 18px;
       font-size: 12px;
@@ -259,6 +275,60 @@
 
     .ai-status.error {
       color: #9f1239;
+    }
+
+    .ai-diagnostics {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fbfdff;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 120px;
+      max-height: 280px;
+      overflow: auto;
+    }
+
+    .ai-diagnostics-empty {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .ai-diagnostic-entry {
+      border: 1px solid #dbe3ee;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .ai-diagnostic-entry.error {
+      border-color: #fecdd3;
+      background: #fff1f2;
+    }
+
+    .ai-diagnostic-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      font-size: 12px;
+    }
+
+    .ai-diagnostic-time {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .ai-diagnostic-body {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      color: #0f172a;
+      font-family: "SFMono-Regular", Consolas, Monaco, monospace;
     }
 
     .panel {
@@ -942,6 +1012,13 @@
         <input id="ai-source-file" type="file" accept=".txt,.log,.json,.md,.csv">
         <button id="btn-ai-load-file" type="button" class="tool-btn">Load File</button>
       </div>
+      <label class="hint" for="ai-image-file">Reference Image (optional)</label>
+      <div class="ai-actions">
+        <input id="ai-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+        <button id="btn-ai-clear-image" type="button" class="tool-btn">Clear Image</button>
+      </div>
+      <div id="ai-image-meta" class="ai-image-meta">No image selected.</div>
+      <img id="ai-image-preview" class="ai-image-preview" alt="Selected reference image preview" hidden>
       <label class="hint" for="ai-extra-instructions">Extra Instructions (optional)</label>
       <textarea id="ai-extra-instructions" class="ai-source" style="min-height:110px" placeholder="Example: Focus on payment and retry flows; include loop and alt fragments."></textarea>
       <div class="ai-actions">
@@ -949,6 +1026,14 @@
         <button id="btn-ai-use-output" type="button" class="tool-btn">Use In Editor</button>
       </div>
       <div id="ai-status" class="ai-status">Ready.</div>
+      <div class="ai-actions">
+        <button id="btn-ai-copy-diagnostics" type="button" class="tool-btn">Copy Diagnostics</button>
+        <button id="btn-ai-clear-diagnostics" type="button" class="tool-btn">Clear Diagnostics</button>
+      </div>
+      <div id="ai-diagnostics" class="ai-diagnostics">
+        <div id="ai-diagnostics-empty" class="ai-diagnostics-empty">No diagnostics captured yet.</div>
+        <div id="ai-diagnostics-log"></div>
+      </div>
       <label class="hint" for="ai-output-text">Generated PlantUML</label>
       <textarea id="ai-output-text" class="ai-output" placeholder="Generated PlantUML appears here..."></textarea>
     </section>
@@ -1009,7 +1094,9 @@
         oauthScopes: "",
         oauthRedirectUri: "",
         availableModels: []
-      }
+      },
+      aiImage: null,
+      aiDiagnostics: []
     };
 
     const layout = {
@@ -1101,6 +1188,10 @@
     const aiAnthropicVersion = document.getElementById("ai-anthropic-version");
     const aiProviderHint = document.getElementById("ai-provider-hint");
     const aiSourceText = document.getElementById("ai-source-text");
+    const aiImageFile = document.getElementById("ai-image-file");
+    const btnAiClearImage = document.getElementById("btn-ai-clear-image");
+    const aiImageMeta = document.getElementById("ai-image-meta");
+    const aiImagePreview = document.getElementById("ai-image-preview");
     const aiExtraInstructions = document.getElementById("ai-extra-instructions");
     const aiOutputText = document.getElementById("ai-output-text");
     const aiSourceFile = document.getElementById("ai-source-file");
@@ -1108,6 +1199,10 @@
     const btnAiGenerate = document.getElementById("btn-ai-generate");
     const btnAiUseOutput = document.getElementById("btn-ai-use-output");
     const aiStatus = document.getElementById("ai-status");
+    const btnAiCopyDiagnostics = document.getElementById("btn-ai-copy-diagnostics");
+    const btnAiClearDiagnostics = document.getElementById("btn-ai-clear-diagnostics");
+    const aiDiagnosticsEmpty = document.getElementById("ai-diagnostics-empty");
+    const aiDiagnosticsLog = document.getElementById("ai-diagnostics-log");
     const aiRowApiKey = document.getElementById("ai-row-api-key");
     const aiRowOauthToken = document.getElementById("ai-row-oauth-token");
     const aiRowOpenaiOrg = document.getElementById("ai-row-openai-org");
@@ -1129,6 +1224,8 @@
       bindContextMenu();
       bindLayoutControls();
       bindGlobalDrag();
+      syncAiImageUi();
+      renderAiDiagnostics();
       applyPreviewScaleUi();
       switchTab(state.activeTab);
       render();
@@ -1253,21 +1350,58 @@
         }
       });
 
+      aiImageFile.addEventListener("change", async () => {
+        try {
+          const file = aiImageFile.files && aiImageFile.files[0];
+          if (!file) {
+            clearAiImage();
+            return;
+          }
+          await loadAiImage(file);
+          setAiStatus("Loaded image " + file.name + ".");
+        } catch (error) {
+          clearAiImage();
+          setAiStatus(error.message || "Failed to load image.", true);
+        }
+      });
+
+      btnAiClearImage.addEventListener("click", () => {
+        clearAiImage();
+        setAiStatus("Image cleared.");
+      });
+
+      btnAiCopyDiagnostics.addEventListener("click", async () => {
+        try {
+          await copyAiDiagnostics();
+          setAiStatus("Diagnostics copied.");
+        } catch (error) {
+          setAiStatus(error.message || "Could not copy diagnostics.", true);
+        }
+      });
+
+      btnAiClearDiagnostics.addEventListener("click", () => {
+        clearAiDiagnostics();
+        setAiStatus("Diagnostics cleared.");
+      });
+
       btnAiGenerate.addEventListener("click", async () => {
         try {
           setAiBusy(true);
           readAiInputsToState();
           const source = aiSourceText.value.trim();
-          if (!source) throw new Error("Provide narrative/log input before generating.");
+          if (!source && !state.aiImage) throw new Error("Provide narrative/log input, an image, or both before generating.");
+          pushAiDiagnostic("info", "Generate request", formatAiGenerationDiagnostic(source, aiExtraInstructions.value.trim(), state.aiImage));
           setAiStatus("Generating diagram...");
-          const prompt = buildAiGenerationPrompt(source, aiExtraInstructions.value.trim());
-          const raw = await generateAiCompletion(prompt);
+          const prompt = buildAiGenerationPrompt(source, aiExtraInstructions.value.trim(), Boolean(state.aiImage));
+          const raw = await generateAiCompletion(prompt, state.aiImage);
           const plantUml = extractPlantUmlFromResponse(raw);
           aiOutputText.value = plantUml;
           setAiStatus("Sequence diagram generated.");
+          pushAiDiagnostic("info", "Generate success", "Provider returned PlantUML output (" + plantUml.length + " chars).");
           saveAiConfig();
         } catch (error) {
           setAiStatus(error.message || "Generation failed.", true);
+          pushAiDiagnostic("error", "Generation failed", error.message || "Unknown generation error.");
         } finally {
           setAiBusy(false);
         }
@@ -1443,6 +1577,9 @@
       btnAiGenerate.disabled = isBusy;
       btnAiUseOutput.disabled = isBusy;
       btnAiLoadFile.disabled = isBusy;
+      aiSourceFile.disabled = isBusy;
+      aiImageFile.disabled = isBusy;
+      btnAiClearImage.disabled = isBusy;
       btnAiRefreshModels.disabled = isBusy;
       btnAiOauthLogin.disabled = isBusy;
       btnAiOauthClear.disabled = isBusy;
@@ -1451,6 +1588,207 @@
     function setAiStatus(message, isError) {
       aiStatus.textContent = message;
       aiStatus.classList.toggle("error", Boolean(isError));
+    }
+
+    function pushAiDiagnostic(level, title, details) {
+      state.aiDiagnostics.unshift({
+        time: new Date().toISOString(),
+        level: level === "error" ? "error" : "info",
+        title: title || "Diagnostic",
+        details: String(details || "").trim()
+      });
+      if (state.aiDiagnostics.length > 40) {
+        state.aiDiagnostics.length = 40;
+      }
+      renderAiDiagnostics();
+    }
+
+    function clearAiDiagnostics() {
+      state.aiDiagnostics = [];
+      renderAiDiagnostics();
+    }
+
+    function renderAiDiagnostics() {
+      if (!aiDiagnosticsLog || !aiDiagnosticsEmpty) return;
+      aiDiagnosticsLog.innerHTML = "";
+      aiDiagnosticsEmpty.hidden = state.aiDiagnostics.length > 0;
+      state.aiDiagnostics.forEach((entry) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "ai-diagnostic-entry" + (entry.level === "error" ? " error" : "");
+
+        const head = document.createElement("div");
+        head.className = "ai-diagnostic-head";
+
+        const title = document.createElement("strong");
+        title.textContent = entry.title;
+        head.appendChild(title);
+
+        const time = document.createElement("span");
+        time.className = "ai-diagnostic-time";
+        time.textContent = formatDiagnosticTime(entry.time);
+        head.appendChild(time);
+
+        const body = document.createElement("pre");
+        body.className = "ai-diagnostic-body";
+        body.textContent = entry.details || "";
+
+        wrapper.appendChild(head);
+        wrapper.appendChild(body);
+        aiDiagnosticsLog.appendChild(wrapper);
+      });
+    }
+
+    async function copyAiDiagnostics() {
+      const text = formatAiDiagnosticsText();
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        throw new Error("Clipboard API is not available in this browser.");
+      }
+      await navigator.clipboard.writeText(text);
+    }
+
+    function formatAiDiagnosticsText() {
+      if (!state.aiDiagnostics.length) return "No diagnostics captured.";
+      return state.aiDiagnostics.map((entry) => {
+        return "[" + formatDiagnosticTime(entry.time) + "] " + entry.title + "\n" + entry.details;
+      }).join("\n\n");
+    }
+
+    function formatDiagnosticTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value || "");
+      return date.toLocaleString();
+    }
+
+    function formatAiGenerationDiagnostic(sourceText, extraInstructions, imageInput) {
+      return [
+        "provider: " + state.ai.provider,
+        "model: " + (state.ai.model || "(none)"),
+        "baseUrl: " + (state.ai.baseUrl || "(none)"),
+        "authType: " + state.ai.authType,
+        "sourceLength: " + sourceText.length,
+        "extraInstructionsLength: " + extraInstructions.length,
+        "image: " + (imageInput ? (imageInput.name + " [" + imageInput.mimeType + "]") : "none")
+      ].join("\n");
+    }
+
+    function formatAiRequestDiagnostic(url, options) {
+      const context = options.diagnosticContext || {};
+      const lines = [];
+      if (context.label) lines.push("label: " + context.label);
+      if (context.provider) lines.push("provider: " + context.provider);
+      if (context.model) lines.push("model: " + context.model);
+      lines.push("method: " + (options.method || "GET"));
+      lines.push("url: " + url);
+      if (typeof context.hasImage === "boolean") lines.push("image: " + (context.hasImage ? "yes" : "no"));
+      if (context.extra) lines.push("context: " + context.extra);
+      if (options.body !== undefined) {
+        lines.push("request:");
+        lines.push(safeJsonStringify(sanitizeAiDiagnosticValue(options.body)));
+      }
+      return lines.join("\n");
+    }
+
+    function sanitizeAiDiagnosticValue(value) {
+      if (Array.isArray(value)) {
+        return value.map((item) => sanitizeAiDiagnosticValue(item));
+      }
+      if (!value || typeof value !== "object") return value;
+
+      const result = {};
+      Object.entries(value).forEach(([key, raw]) => {
+        const lower = key.toLowerCase();
+        if (lower === "authorization" || lower.includes("api_key") || lower.includes("token")) {
+          result[key] = "[redacted]";
+          return;
+        }
+        if (key === "data" && typeof raw === "string" && raw.length > 80) {
+          result[key] = "[base64 omitted: " + raw.length + " chars]";
+          return;
+        }
+        if (key === "url" && typeof raw === "string" && raw.startsWith("data:image/")) {
+          result[key] = "[image data url omitted]";
+          return;
+        }
+        if (key === "images" && Array.isArray(raw)) {
+          result[key] = ["[image omitted x" + raw.length + "]"];
+          return;
+        }
+        if (typeof raw === "string" && raw.length > 1500) {
+          result[key] = raw.slice(0, 1500) + "... [truncated " + raw.length + " chars]";
+          return;
+        }
+        result[key] = sanitizeAiDiagnosticValue(raw);
+      });
+      return result;
+    }
+
+    function safeJsonStringify(value) {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (_error) {
+        return String(value);
+      }
+    }
+
+    function formatAiResponseDiagnostic(text) {
+      const raw = String(text || "");
+      if (!raw) return "(empty response body)";
+      try {
+        return JSON.stringify(JSON.parse(raw), null, 2).slice(0, 4000);
+      } catch (_error) {
+        return raw.slice(0, 4000);
+      }
+    }
+
+    async function loadAiImage(file) {
+      if (!file) throw new Error("Select an image first.");
+      if (!String(file.type || "").startsWith("image/")) {
+        throw new Error("Selected file is not an image.");
+      }
+
+      const dataUrl = await readFileAsDataUrl(file);
+      const commaIndex = dataUrl.indexOf(",");
+      const base64 = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : "";
+      if (!base64) throw new Error("Image data could not be read.");
+
+      state.aiImage = {
+        name: file.name,
+        mimeType: file.type || "image/png",
+        size: file.size || 0,
+        dataUrl,
+        base64
+      };
+      syncAiImageUi();
+    }
+
+    function clearAiImage() {
+      state.aiImage = null;
+      if (aiImageFile) aiImageFile.value = "";
+      syncAiImageUi();
+    }
+
+    function syncAiImageUi() {
+      const image = state.aiImage;
+      if (!image) {
+        aiImageMeta.textContent = "No image selected.";
+        aiImagePreview.hidden = true;
+        aiImagePreview.removeAttribute("src");
+        return;
+      }
+
+      const sizeKb = image.size ? Math.max(1, Math.round(image.size / 1024)) : 0;
+      aiImageMeta.textContent = image.name + " (" + image.mimeType + ", " + sizeKb + " KB)";
+      aiImagePreview.src = image.dataUrl;
+      aiImagePreview.hidden = false;
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read the selected file."));
+        reader.readAsDataURL(file);
+      });
     }
 
     function defaultAiBaseUrl(provider) {
@@ -1600,7 +1938,13 @@
 
       const response = await requestAiJson(url, {
         method: "GET",
-        headers
+        headers,
+        diagnosticContext: {
+          label: "List models",
+          provider: isOpenAi ? "openai" : "openai-compatible",
+          model: state.ai.model || "",
+          hasImage: false
+        }
       });
       return (Array.isArray(response?.data) ? response.data : [])
         .map((entry) => entry?.id)
@@ -1621,7 +1965,13 @@
       }
       const response = await requestAiJson(trimSlash(baseUrl) + "/models", {
         method: "GET",
-        headers
+        headers,
+        diagnosticContext: {
+          label: "List models",
+          provider: "claude",
+          model: state.ai.model || "",
+          hasImage: false
+        }
       });
       return (Array.isArray(response?.data) ? response.data : [])
         .map((entry) => entry?.id)
@@ -1643,7 +1993,13 @@
 
       const response = await requestAiJson(url, {
         method: "GET",
-        headers
+        headers,
+        diagnosticContext: {
+          label: "List models",
+          provider: "gemini",
+          model: state.ai.model || "",
+          hasImage: false
+        }
       });
       return (Array.isArray(response?.models) ? response.models : [])
         .filter((entry) => {
@@ -1663,7 +2019,13 @@
         try {
           const response = await requestAiJson(endpoint, {
             method: "GET",
-            headers
+            headers,
+            diagnosticContext: {
+              label: "List models",
+              provider: "ollama",
+              model: state.ai.model || "",
+              hasImage: false
+            }
           });
 
           const fromTags = (Array.isArray(response?.models) ? response.models : [])
@@ -1720,29 +2082,35 @@
       return base;
     }
 
-    function buildAiGenerationPrompt(sourceText, extraInstructions) {
+    function buildAiGenerationPrompt(sourceText, extraInstructions, hasImage) {
       const extras = extraInstructions ? ("\nExtra requirements:\n" + extraInstructions + "\n") : "";
+      const imageInstruction = hasImage
+        ? "\nAn image is attached. Use it as additional source material when inferring the sequence flow.\n"
+        : "";
+      const inputText = sourceText ? sourceText : "(No narrative or log text provided. Infer the flow from the image.)";
       return [
-        "Convert the following runtime narrative/logs into a valid PlantUML sequence diagram.",
+        "Convert the following runtime narrative, logs, and optional reference image into a valid PlantUML sequence diagram.",
         "Output requirements:",
         "- Return PlantUML only, no markdown fences, no explanation.",
         "- Start with @startuml and end with @enduml.",
         "- Use participants, messages, notes, and logic blocks (loop/alt/opt/par) when appropriate.",
         "- Keep labels concise and technically accurate.",
+        "- If an image is provided, use visible labels, arrows, UI states, or whiteboard structure as supporting evidence.",
+        imageInstruction,
         extras,
         "Input:",
-        sourceText
+        inputText
       ].join("\n");
     }
 
-    async function generateAiCompletion(prompt) {
-      if (state.ai.provider === "claude") return generateWithClaude(prompt);
-      if (state.ai.provider === "gemini") return generateWithGemini(prompt);
-      if (state.ai.provider === "ollama") return generateWithOllama(prompt);
-      return generateWithOpenAiCompatible(prompt, state.ai.provider === "openai");
+    async function generateAiCompletion(prompt, imageInput) {
+      if (state.ai.provider === "claude") return generateWithClaude(prompt, imageInput);
+      if (state.ai.provider === "gemini") return generateWithGemini(prompt, imageInput);
+      if (state.ai.provider === "ollama") return generateWithOllama(prompt, imageInput);
+      return generateWithOpenAiCompatible(prompt, imageInput, state.ai.provider === "openai");
     }
 
-    async function generateWithOpenAiCompatible(prompt, isOpenAi) {
+    async function generateWithOpenAiCompatible(prompt, imageInput, isOpenAi) {
       const url = openAiChatUrl(state.ai.baseUrl, isOpenAi);
       const token = state.ai.authType === "oauth" ? aiOauthToken.value.trim() : aiApiKey.value.trim();
       if (!token) throw new Error((state.ai.authType === "oauth" ? "OAuth token" : "API key") + " is required.");
@@ -1760,7 +2128,13 @@
         body: {
           model: state.ai.model || defaultAiModel("openai"),
           temperature: 0.2,
-          messages: [{ role: "user", content: prompt }]
+          messages: [{ role: "user", content: buildOpenAiPromptContent(prompt, imageInput) }]
+        },
+        diagnosticContext: {
+          label: "Generate sequence diagram",
+          provider: isOpenAi ? "openai" : "openai-compatible",
+          model: state.ai.model || defaultAiModel("openai"),
+          hasImage: Boolean(imageInput)
         }
       });
 
@@ -1772,7 +2146,7 @@
       throw new Error("No model output returned.");
     }
 
-    async function generateWithClaude(prompt) {
+    async function generateWithClaude(prompt, imageInput) {
       const url = trimSlash(state.ai.baseUrl || defaultAiBaseUrl("claude")) + "/messages";
       const token = state.ai.authType === "oauth" ? aiOauthToken.value.trim() : aiApiKey.value.trim();
       if (!token) throw new Error((state.ai.authType === "oauth" ? "OAuth token" : "API key") + " is required.");
@@ -1794,7 +2168,13 @@
           model: state.ai.model || defaultAiModel("claude"),
           max_tokens: 2200,
           temperature: 0.2,
-          messages: [{ role: "user", content: prompt }]
+          messages: [{ role: "user", content: buildClaudePromptContent(prompt, imageInput) }]
+        },
+        diagnosticContext: {
+          label: "Generate sequence diagram",
+          provider: "claude",
+          model: state.ai.model || defaultAiModel("claude"),
+          hasImage: Boolean(imageInput)
         }
       });
 
@@ -1808,7 +2188,7 @@
       throw new Error("No model output returned.");
     }
 
-    async function generateWithGemini(prompt) {
+    async function generateWithGemini(prompt, imageInput) {
       const modelName = (state.ai.model || defaultAiModel("gemini")).replace(/^models\//, "");
       const base = trimSlash(state.ai.baseUrl || defaultAiBaseUrl("gemini"));
       let url = base + "/models/" + encodeURIComponent(modelName) + ":generateContent";
@@ -1830,8 +2210,14 @@
         method: "POST",
         headers,
         body: {
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          contents: [{ role: "user", parts: buildGeminiPromptParts(prompt, imageInput) }],
           generationConfig: { temperature: 0.2 }
+        },
+        diagnosticContext: {
+          label: "Generate sequence diagram",
+          provider: "gemini",
+          model: state.ai.model || defaultAiModel("gemini"),
+          hasImage: Boolean(imageInput)
         }
       });
 
@@ -1843,7 +2229,7 @@
       throw new Error("No model output returned.");
     }
 
-    async function generateWithOllama(prompt) {
+    async function generateWithOllama(prompt, imageInput) {
       const base = trimSlash(state.ai.baseUrl || defaultAiBaseUrl("ollama"));
       const url = base + "/api/chat";
       const headers = {
@@ -1857,7 +2243,13 @@
           model: state.ai.model || defaultAiModel("ollama"),
           stream: false,
           options: { temperature: 0.2 },
-          messages: [{ role: "user", content: prompt }]
+          messages: [buildOllamaPromptMessage(prompt, imageInput)]
+        },
+        diagnosticContext: {
+          label: "Generate sequence diagram",
+          provider: "ollama",
+          model: state.ai.model || defaultAiModel("ollama"),
+          hasImage: Boolean(imageInput)
         }
       });
 
@@ -1866,7 +2258,55 @@
       throw new Error("No model output returned.");
     }
 
+    function buildOpenAiPromptContent(prompt, imageInput) {
+      if (!imageInput) return prompt;
+      return [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: imageInput.dataUrl } }
+      ];
+    }
+
+    function buildClaudePromptContent(prompt, imageInput) {
+      const content = [{ type: "text", text: prompt }];
+      if (imageInput) {
+        content.unshift({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: imageInput.mimeType,
+            data: imageInput.base64
+          }
+        });
+      }
+      return content;
+    }
+
+    function buildGeminiPromptParts(prompt, imageInput) {
+      const parts = [{ text: prompt }];
+      if (imageInput) {
+        parts.push({
+          inline_data: {
+            mime_type: imageInput.mimeType,
+            data: imageInput.base64
+          }
+        });
+      }
+      return parts;
+    }
+
+    function buildOllamaPromptMessage(prompt, imageInput) {
+      const message = {
+        role: "user",
+        content: prompt
+      };
+      if (imageInput) {
+        message.images = [imageInput.base64];
+      }
+      return message;
+    }
+
     async function requestAiJson(url, options) {
+      const requestDetails = options.diagnosticContext ? formatAiRequestDiagnostic(url, options) : "";
       const response = await fetch(url, {
         method: options.method || "GET",
         headers: options.headers || {},
@@ -1883,7 +2323,26 @@
             message = text.slice(0, 220);
           }
         }
+        if (options.diagnosticContext) {
+          pushAiDiagnostic(
+            "error",
+            (options.diagnosticContext.label || "AI request") + " failed",
+            [
+              requestDetails,
+              "status: " + response.status + " " + response.statusText,
+              "response:",
+              formatAiResponseDiagnostic(text)
+            ].join("\n")
+          );
+        }
         throw new Error(message);
+      }
+      if (options.diagnosticContext && options.diagnosticContext.logSuccess) {
+        pushAiDiagnostic(
+          "info",
+          (options.diagnosticContext.label || "AI request") + " succeeded",
+          requestDetails + "\nstatus: " + response.status + " " + response.statusText
+        );
       }
       if (!text) return {};
       return JSON.parse(text);
@@ -2166,6 +2625,7 @@
       state.messages = parsed.messages;
       state.notes = parsed.notes;
       state.fragments = parsed.fragments;
+      normalizeDiagramState();
       state.selection = null;
       textArea.value = plantUmlText;
       render();
@@ -2556,6 +3016,7 @@
         endIndex: Math.max(fragment.startIndex, fragment.endIndex)
       }));
 
+      normalizeDiagramState();
       state.selection = null;
     }
 
@@ -3043,6 +3504,7 @@
     }
 
     function render() {
+      normalizeDiagramState();
       previewCanvas.innerHTML = buildSvg();
       bindSvgInteractions();
       renderItems();
@@ -3667,6 +4129,7 @@
     }
 
     function serializePlantUml() {
+      normalizeDiagramState();
       const lines = ["@startuml"];
       state.participants.forEach((participant) => {
         lines.push(`${participant.type} ${plantToken(participant.name)}`);
@@ -3712,7 +4175,11 @@
       if (state.notes.length) {
         lines.push("");
         state.notes.forEach((note) => {
-          lines.push(`note ${note.position} ${plantToken(findParticipantName(note.targetId))}: ${note.text}`);
+          const noteTarget = plantToken(findParticipantName(note.targetId));
+          const noteHead = note.position === "over"
+            ? `note over ${noteTarget}`
+            : `note ${note.position} of ${noteTarget}`;
+          lines.push(`${noteHead}: ${note.text}`);
           if (Number.isFinite(Number(note.anchorIndex))) {
             lines.push(`  ' note-anchor ${Math.max(0, Math.round(Number(note.anchorIndex)))}`);
           }
@@ -4056,6 +4523,10 @@
           participants.splice(index, 1);
         }
       }
+    }
+
+    function normalizeDiagramState() {
+      collapsePhantomNoteParticipants(state.participants, state.messages, state.notes);
     }
 
     function parseParticipantDeclarationLine(line) {
