@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>inturn v0.05</title>
+  <title>inturn v0.08</title>
   <style>
     :root {
       --bg: #f4f6fa;
@@ -839,7 +839,7 @@
 <body>
   <header>
     <div class="header-left">
-      <div class="title">inturn <span class="version-badge">v0.05</span></div>
+      <div class="title">inturn <span class="version-badge">v0.08</span></div>
       <div class="tab-bar" role="tablist" aria-label="Application tabs">
         <button id="tab-btn-editor" class="tab-btn active" type="button" role="tab" aria-selected="true">Editor</button>
         <button id="tab-btn-ai" class="tab-btn" type="button" role="tab" aria-selected="false">AI Tooling</button>
@@ -1188,6 +1188,18 @@
         <button id="btn-c4-build-sequence" class="tool-btn" type="button">Build Sequence</button>
       </div>
 
+      <div class="sequence-options">
+        <h3>Numbering</h3>
+        <label class="checkbox-row" for="c4-numbering-enabled">
+          <span>Number relationship flows</span>
+          <input id="c4-numbering-enabled" type="checkbox" checked>
+        </label>
+        <label for="c4-numbering-start">
+          Start Number
+          <input id="c4-numbering-start" type="number" min="1" value="1">
+        </label>
+      </div>
+
       <div class="hint">Use this tab for a first-pass C4 container map built from the current sequence diagram, or create a standalone architecture view manually.</div>
       <div id="c4-items-summary" class="c4-summary">0 nodes, 0 relationships, 0 boundaries.</div>
 
@@ -1327,7 +1339,11 @@
         boundaries: [],
         relationships: [],
         selection: null,
-        drag: null
+        drag: null,
+        numbering: {
+          enabled: true,
+          start: 1
+        }
       },
       autoNumber: {
         enabled: false,
@@ -1458,6 +1474,8 @@
     const c4ItemsSummary = document.getElementById("c4-items-summary");
     const c4Status = document.getElementById("c4-status");
     const c4SourceText = document.getElementById("c4-source-text");
+    const c4NumberingEnabled = document.getElementById("c4-numbering-enabled");
+    const c4NumberingStart = document.getElementById("c4-numbering-start");
     const btnC4AddRelationship = document.getElementById("btn-c4-add-relationship");
     const btnC4AutoLayout = document.getElementById("btn-c4-auto-layout");
     const btnC4ImportSequence = document.getElementById("btn-c4-import-sequence");
@@ -3079,6 +3097,19 @@
       [c4PropName, c4PropType, c4PropDescription, c4PropTechnology, c4PropBoundary, c4PropFrom, c4PropTo, c4PropWidth, c4PropHeight].forEach((node) => {
         node.addEventListener("input", applyC4Props);
         node.addEventListener("change", applyC4Props);
+      });
+
+      c4NumberingEnabled.addEventListener("change", () => {
+        readC4NumberingControlsToState();
+        renderC4();
+      });
+      c4NumberingStart.addEventListener("input", () => {
+        readC4NumberingControlsToState();
+        renderC4();
+      });
+      c4NumberingStart.addEventListener("change", () => {
+        readC4NumberingControlsToState();
+        renderC4();
       });
 
       btnC4AddRelationship.addEventListener("click", addC4Relationship);
@@ -5048,13 +5079,14 @@
     function nextC4Placement(indexOverride) {
       const index = Number.isFinite(indexOverride) ? Number(indexOverride) : state.c4.nodes.length + state.c4.boundaries.length;
       return {
-        x: 80 + (index % 3) * 260,
-        y: 100 + Math.floor(index / 3) * 150
+        x: 100 + (index % 3) * 340,
+        y: 110 + Math.floor(index / 3) * 220
       };
     }
 
     function renderC4() {
       normalizeC4State();
+      syncC4NumberingControls();
       c4PreviewCanvas.innerHTML = buildC4Svg();
       bindC4SvgInteractions();
       renderC4Items();
@@ -5069,8 +5101,8 @@
       const boundaryMaxY = state.c4.boundaries.reduce((max, boundary) => Math.max(max, boundary.y + boundary.height), 0);
       const nodeMaxX = boxes.reduce((max, box) => Math.max(max, box.x + box.width), 0);
       const nodeMaxY = boxes.reduce((max, box) => Math.max(max, box.y + box.height), 0);
-      const width = Math.max(980, boundaryMaxX, nodeMaxX) + 80;
-      const height = Math.max(560, boundaryMaxY, nodeMaxY) + 80;
+      const width = Math.max(1260, boundaryMaxX, nodeMaxX) + 120;
+      const height = Math.max(760, boundaryMaxY, nodeMaxY) + 120;
 
       const groups = [];
       const relationshipLayout = buildC4RelationshipLayout();
@@ -5087,15 +5119,16 @@
         );
       });
 
-      state.c4.relationships.forEach((relationship) => {
+      state.c4.relationships.forEach((relationship, index) => {
         const route = relationshipLayout.get(relationship.id);
         if (!route) return;
+        const displayLabel = c4RelationshipDisplayLabel(relationship, index);
         groups.push(
           `<g class="svg-item" data-id="${relationship.id}" data-kind="relationship">` +
           `<path class="c4-relationship-hit" data-id="${relationship.id}" data-kind="relationship" d="${route.path}" fill="none" stroke="transparent" stroke-width="18" />` +
           `<path d="${route.path}" fill="none" stroke="#0f172a" stroke-width="2.2" stroke-linecap="round" marker-end="url(#c4-arrow)" />` +
           `<rect x="${route.labelBox.x}" y="${route.labelBox.y}" width="${route.labelBox.width}" height="${route.labelBox.height}" rx="10" fill="#ffffff" fill-opacity="0.92" stroke="#dbe3ee" />` +
-          `<text class="editable c4-editable" data-id="${relationship.id}" data-kind="relationship" data-field="label" x="${route.labelPoint.x}" y="${route.labelBox.y + 15}" text-anchor="middle" font-size="13" fill="#0f172a">${esc(relationship.label || "Uses")}</text>` +
+          `<text class="editable c4-editable" data-id="${relationship.id}" data-kind="relationship" data-field="label" x="${route.labelPoint.x}" y="${route.labelBox.y + 15}" text-anchor="middle" font-size="13" fill="#0f172a">${esc(displayLabel)}</text>` +
           `${relationship.technology ? `<text x="${route.labelPoint.x}" y="${route.labelBox.y + 29}" text-anchor="middle" font-size="11" fill="#475569">${esc(relationship.technology)}</text>` : ""}` +
           `</g>`
         );
@@ -5259,12 +5292,12 @@
       pairGroups.forEach((ids) => {
         ids.sort((a, b) => a.localeCompare(b));
         ids.forEach((id, index) => {
-          pairOffsetMap.set(id, (index - (ids.length - 1) / 2) * 26);
+          pairOffsetMap.set(id, (index - (ids.length - 1) / 2) * 34);
         });
       });
 
       const routes = new Map();
-      state.c4.relationships.forEach((relationship) => {
+      state.c4.relationships.forEach((relationship, index) => {
         const start = anchorMap.get(relationship.id + ":from");
         const end = anchorMap.get(relationship.id + ":to");
         if (!start || !end) return;
@@ -5275,29 +5308,127 @@
         const nx = -dy / len;
         const ny = dx / len;
         const pairOffset = pairOffsetMap.get(relationship.id) || 0;
+        const crowdSize = Math.max(
+          endpointGroups.get(relationship.fromId + ":" + relMeta.get(relationship.id)?.fromSide)?.length || 1,
+          endpointGroups.get(relationship.toId + ":" + relMeta.get(relationship.id)?.toSide)?.length || 1
+        );
+        const crowdOffset = (crowdSize - 1) * 10;
         const control = {
-          x: (start.x + end.x) / 2 + nx * pairOffset,
-          y: (start.y + end.y) / 2 + ny * pairOffset
+          x: (start.x + end.x) / 2 + nx * (pairOffset + crowdOffset),
+          y: (start.y + end.y) / 2 + ny * (pairOffset + crowdOffset)
         };
         const labelPoint = quadraticPoint(start, control, end, 0.5);
-        const labelLines = [relationship.label || "Uses"];
+        const labelOffset = pairOffset + crowdOffset * 0.75;
+        const labelLines = [c4RelationshipDisplayLabel(relationship, index)];
         if (relationship.technology) labelLines.push(relationship.technology);
-        const labelWidth = Math.min(280, Math.max(...labelLines.map((line) => Math.max(72, String(line || "").length * 7 + 18))));
+        const labelWidth = Math.min(320, Math.max(...labelLines.map((line) => Math.max(84, String(line || "").length * 7 + 18))));
         const labelHeight = labelLines.length > 1 ? 36 : 20;
+        const placedPoint = {
+          x: labelPoint.x + nx * labelOffset,
+          y: labelPoint.y + ny * labelOffset
+        };
 
         routes.set(relationship.id, {
           path: `M ${round2(start.x)} ${round2(start.y)} Q ${round2(control.x)} ${round2(control.y)} ${round2(end.x)} ${round2(end.y)}`,
-          labelPoint,
+          labelPoint: placedPoint,
+          normal: { x: nx, y: ny },
           labelBox: {
-            x: round2(labelPoint.x - labelWidth / 2),
-            y: round2(labelPoint.y - (labelLines.length > 1 ? 22 : 14)),
+            x: round2(placedPoint.x - labelWidth / 2),
+            y: round2(placedPoint.y - (labelLines.length > 1 ? 22 : 14)),
             width: round2(labelWidth),
             height: round2(labelHeight)
           }
         });
       });
 
+      spreadC4RelationshipLabels(routes, nodeBoxes);
       return routes;
+    }
+
+    function spreadC4RelationshipLabels(routes, nodeBoxes) {
+      const entries = Array.from(routes.values());
+      const boxes = Array.from(nodeBoxes.values());
+      for (let pass = 0; pass < 10; pass += 1) {
+        let moved = false;
+
+        entries.forEach((entry) => {
+          boxes.forEach((nodeBox) => {
+            if (!boxesOverlap(entry.labelBox, nodeBox, 14)) return;
+            const labelCenter = boxCenter(entry.labelBox);
+            const nodeCenter = boxCenter(nodeBox);
+            let dx = labelCenter.x - nodeCenter.x;
+            let dy = labelCenter.y - nodeCenter.y;
+            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+              dx = entry.normal?.x || 1;
+              dy = entry.normal?.y || 0;
+            }
+            const shift = normalizedShift(dx, dy, 18);
+            nudgeLabelEntry(entry, shift.x, shift.y);
+            moved = true;
+          });
+        });
+
+        for (let left = 0; left < entries.length; left += 1) {
+          for (let right = left + 1; right < entries.length; right += 1) {
+            const a = entries[left];
+            const b = entries[right];
+            if (!boxesOverlap(a.labelBox, b.labelBox, 10)) continue;
+            const overlapX = boxOverlapX(a.labelBox, b.labelBox) + 8;
+            const overlapY = boxOverlapY(a.labelBox, b.labelBox) + 6;
+            const aCenter = boxCenter(a.labelBox);
+            const bCenter = boxCenter(b.labelBox);
+            if (overlapX <= overlapY) {
+              const direction = aCenter.x <= bCenter.x ? -1 : 1;
+              nudgeLabelEntry(a, direction * overlapX / 2, 0);
+              nudgeLabelEntry(b, -direction * overlapX / 2, 0);
+            } else {
+              const direction = aCenter.y <= bCenter.y ? -1 : 1;
+              nudgeLabelEntry(a, 0, direction * overlapY / 2);
+              nudgeLabelEntry(b, 0, -direction * overlapY / 2);
+            }
+            moved = true;
+          }
+        }
+
+        if (!moved) break;
+      }
+    }
+
+    function nudgeLabelEntry(entry, dx, dy) {
+      entry.labelPoint.x = round2(entry.labelPoint.x + dx);
+      entry.labelPoint.y = round2(entry.labelPoint.y + dy);
+      entry.labelBox.x = round2(entry.labelBox.x + dx);
+      entry.labelBox.y = round2(entry.labelBox.y + dy);
+    }
+
+    function boxCenter(box) {
+      return {
+        x: box.x + box.width / 2,
+        y: box.y + box.height / 2
+      };
+    }
+
+    function boxesOverlap(a, b, padding = 0) {
+      return a.x < b.x + b.width + padding &&
+        a.x + a.width + padding > b.x &&
+        a.y < b.y + b.height + padding &&
+        a.y + a.height + padding > b.y;
+    }
+
+    function boxOverlapX(a, b) {
+      return Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+    }
+
+    function boxOverlapY(a, b) {
+      return Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    }
+
+    function normalizedShift(dx, dy, distance) {
+      const length = Math.hypot(dx, dy) || 1;
+      return {
+        x: round2(dx / length * distance),
+        y: round2(dy / length * distance)
+      };
     }
 
     function pushC4EndpointGroup(groups, relationshipId, nodeId, side, endpoint, otherCenter) {
@@ -5411,10 +5542,10 @@
       const rows = [
         ...state.c4.boundaries.map((boundary) => ({ kind: "boundary", id: boundary.id, label: "Boundary: " + boundary.name })),
         ...state.c4.nodes.map((node) => ({ kind: "node", id: node.id, label: (node.boundaryId ? "  " : "") + capitalize(node.kind) + ": " + node.name })),
-        ...state.c4.relationships.map((relationship) => ({
+        ...state.c4.relationships.map((relationship, index) => ({
           kind: "relationship",
           id: relationship.id,
-          label: "Rel: " + findC4NodeName(relationship.fromId) + " -> " + findC4NodeName(relationship.toId) + (relationship.label ? " (" + relationship.label + ")" : "")
+          label: c4RelationshipListLabel(relationship, index)
         }))
       ];
 
@@ -5634,6 +5765,29 @@
       return state.c4.nodes.find((node) => node.id === id)?.name || "";
     }
 
+    function c4RelationshipNumber(relationship, indexOverride) {
+      if (!state.c4.numbering?.enabled) return "";
+      const explicit = Number(relationship?.order);
+      if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
+      const start = Math.max(1, Number(state.c4.numbering?.start) || 1);
+      if (Number.isInteger(indexOverride) && indexOverride >= 0) return start + indexOverride;
+      const index = state.c4.relationships.findIndex((entry) => entry.id === relationship?.id);
+      return index >= 0 ? start + index : "";
+    }
+
+    function c4RelationshipDisplayLabel(relationship, indexOverride) {
+      const number = c4RelationshipNumber(relationship, indexOverride);
+      const base = String(relationship?.label || "").trim() || "Uses";
+      return number ? number + ". " + base : base;
+    }
+
+    function c4RelationshipListLabel(relationship, indexOverride) {
+      const prefix = c4RelationshipNumber(relationship, indexOverride);
+      return (prefix ? "Rel " + prefix : "Rel") + ": " +
+        findC4NodeName(relationship.fromId) + " -> " + findC4NodeName(relationship.toId) +
+        " (" + c4RelationshipDisplayLabel(relationship, indexOverride) + ")";
+    }
+
     function fillC4BoundarySelect(selectNode, selectedId, excludeId) {
       selectNode.innerHTML = "";
       const none = document.createElement("option");
@@ -5674,37 +5828,379 @@
     }
 
     function autoLayoutC4() {
-      const rootBoundaries = state.c4.boundaries.filter((boundary) => !boundary.parentId);
-      let cursorX = 60;
+      normalizeC4State();
+
+      const rootBoundaries = [...state.c4.boundaries]
+        .filter((boundary) => !boundary.parentId)
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+      let cursorX = 80;
+      let cursorY = 70;
+      let rowHeight = 0;
+      let maxRootBottom = 0;
 
       rootBoundaries.forEach((boundary) => {
-        const boundaryNodes = state.c4.nodes.filter((node) => node.boundaryId === boundary.id);
-        const cols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(Math.max(1, boundaryNodes.length)))));
-        boundaryNodes.forEach((node, index) => {
-          const col = index % cols;
-          const row = Math.floor(index / cols);
-          node.x = cursorX + 36 + col * 250;
-          node.y = boundary.y + 80 + row * 150;
+        let bounds = autoLayoutC4Boundary(boundary.id, cursorX, cursorY);
+        if (cursorX > 80 && cursorX + bounds.width > 1680) {
+          cursorX = 80;
+          cursorY += rowHeight + 130;
+          rowHeight = 0;
+          bounds = autoLayoutC4Boundary(boundary.id, cursorX, cursorY);
+        }
+        rowHeight = Math.max(rowHeight, bounds.height);
+        maxRootBottom = Math.max(maxRootBottom, bounds.maxY);
+        cursorX += bounds.width + 120;
+      });
+
+      const rootNodes = state.c4.nodes.filter((node) => !node.boundaryId);
+      const rootOriginY = rootBoundaries.length ? maxRootBottom + 130 : 100;
+      layoutC4NodeCluster(rootNodes, 100, rootOriginY, 1480);
+      expandC4BoundariesToFitContents();
+    }
+
+    function autoLayoutC4Boundary(boundaryId, originX, originY) {
+      const boundary = state.c4.boundaries.find((entry) => entry.id === boundaryId);
+      if (!boundary) return { width: 0, height: 0, maxX: originX, maxY: originY };
+
+      const childBoundaries = [...state.c4.boundaries]
+        .filter((entry) => entry.parentId === boundaryId)
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      const directNodes = state.c4.nodes.filter((node) => node.boundaryId === boundaryId);
+      const innerLeft = originX + 42;
+      const innerTop = originY + 84;
+      const maxInnerWidth = 1220;
+
+      let cursorX = innerLeft;
+      let cursorY = innerTop;
+      let rowHeight = 0;
+      let contentMaxX = originX + 320;
+      let contentMaxY = originY + 220;
+
+      childBoundaries.forEach((child) => {
+        let childBounds = autoLayoutC4Boundary(child.id, cursorX, cursorY);
+        if (cursorX > innerLeft && cursorX + childBounds.width > innerLeft + maxInnerWidth) {
+          cursorX = innerLeft;
+          cursorY += rowHeight + 90;
+          rowHeight = 0;
+          childBounds = autoLayoutC4Boundary(child.id, cursorX, cursorY);
+        }
+        rowHeight = Math.max(rowHeight, childBounds.height);
+        contentMaxX = Math.max(contentMaxX, childBounds.maxX);
+        contentMaxY = Math.max(contentMaxY, childBounds.maxY);
+        cursorX += childBounds.width + 90;
+      });
+
+      const nodeOriginY = childBoundaries.length ? cursorY + rowHeight + 90 : innerTop;
+      const nodeLayout = layoutC4NodeCluster(directNodes, innerLeft, nodeOriginY, maxInnerWidth);
+
+      boundary.x = originX;
+      boundary.y = originY;
+      contentMaxX = Math.max(contentMaxX, nodeLayout.maxX);
+      contentMaxY = Math.max(contentMaxY, nodeLayout.maxY);
+      boundary.width = Math.max(380, Math.round(contentMaxX - originX + 44));
+      boundary.height = Math.max(240, Math.round(contentMaxY - originY + 40));
+
+      return {
+        width: boundary.width,
+        height: boundary.height,
+        maxX: boundary.x + boundary.width,
+        maxY: boundary.y + boundary.height
+      };
+    }
+
+    function layoutC4NodeCluster(nodes, originX, originY, rowWidthHint = 1400) {
+      if (!nodes.length) {
+        return {
+          width: 0,
+          height: 0,
+          maxX: originX + 240,
+          maxY: originY + 140
+        };
+      }
+
+      const nodeIds = new Set(nodes.map((node) => node.id));
+      const relationships = state.c4.relationships.filter((relationship) => {
+        return nodeIds.has(relationship.fromId) && nodeIds.has(relationship.toId);
+      });
+      const components = buildC4NodeComponents(nodes, relationships)
+        .sort((left, right) => right.nodes.length - left.nodes.length || right.relationships.length - left.relationships.length);
+
+      let cursorX = originX;
+      let cursorY = originY;
+      let rowHeight = 0;
+      let maxX = originX;
+      let maxY = originY;
+
+      components.forEach((component) => {
+        const layout = buildC4ComponentLayout(component.nodes, component.relationships);
+        if (cursorX > originX && cursorX + layout.width > originX + rowWidthHint) {
+          cursorX = originX;
+          cursorY += rowHeight + 120;
+          rowHeight = 0;
+        }
+
+        component.nodes.forEach((node) => {
+          const pos = layout.positions.get(node.id);
+          if (!pos) return;
+          node.x = Math.round(cursorX + pos.x);
+          node.y = Math.round(cursorY + pos.y);
         });
-        const rows = Math.max(1, Math.ceil(Math.max(1, boundaryNodes.length) / cols));
-        boundary.x = cursorX;
-        boundary.y = 60;
-        boundary.width = Math.max(320, 80 + cols * 250);
-        boundary.height = Math.max(220, 120 + rows * 150);
-        cursorX += boundary.width + 60;
+
+        const componentGap = Math.max(120, 70 + component.relationships.length * 10);
+        cursorX += layout.width + componentGap;
+        rowHeight = Math.max(rowHeight, layout.height);
+        maxX = Math.max(maxX, cursorX);
+        maxY = Math.max(maxY, cursorY + layout.height);
       });
 
-      const unboundedNodes = state.c4.nodes.filter((node) => !node.boundaryId);
-      const baseY = rootBoundaries.length
-        ? rootBoundaries.reduce((max, boundary) => Math.max(max, boundary.y + boundary.height), 0) + 70
-        : 110;
+      return {
+        width: Math.max(0, maxX - originX),
+        height: Math.max(0, maxY - originY),
+        maxX,
+        maxY
+      };
+    }
 
-      unboundedNodes.forEach((node, index) => {
-        const col = index % 3;
-        const row = Math.floor(index / 3);
-        node.x = 80 + col * 270;
-        node.y = baseY + row * 150;
+    function buildC4NodeComponents(nodes, relationships) {
+      const adjacency = new Map(nodes.map((node) => [node.id, new Set()]));
+      relationships.forEach((relationship) => {
+        adjacency.get(relationship.fromId)?.add(relationship.toId);
+        adjacency.get(relationship.toId)?.add(relationship.fromId);
       });
+
+      const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+      const visited = new Set();
+      const components = [];
+
+      nodes.forEach((node) => {
+        if (visited.has(node.id)) return;
+        const queue = [node.id];
+        const ids = [];
+        visited.add(node.id);
+
+        while (queue.length) {
+          const current = queue.shift();
+          ids.push(current);
+          adjacency.get(current)?.forEach((nextId) => {
+            if (visited.has(nextId)) return;
+            visited.add(nextId);
+            queue.push(nextId);
+          });
+        }
+
+        const idSet = new Set(ids);
+        components.push({
+          nodes: ids.map((id) => nodeMap.get(id)).filter(Boolean),
+          relationships: relationships.filter((relationship) => idSet.has(relationship.fromId) && idSet.has(relationship.toId))
+        });
+      });
+
+      return components;
+    }
+
+    function buildC4ComponentLayout(nodes, relationships) {
+      const sizes = new Map(nodes.map((node) => [node.id, c4NodeSize(node.kind)]));
+      if (!relationships.length) {
+        const positions = new Map();
+        const columns = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
+        const columnGap = 340;
+        const rowGap = 220;
+        let maxX = 0;
+        let maxY = 0;
+        nodes.forEach((node, index) => {
+          const size = sizes.get(node.id);
+          const x = (index % columns) * columnGap;
+          const y = Math.floor(index / columns) * rowGap;
+          positions.set(node.id, { x, y });
+          maxX = Math.max(maxX, x + size.width);
+          maxY = Math.max(maxY, y + size.height);
+        });
+        return { positions, width: maxX, height: maxY };
+      }
+
+      const degreeMap = new Map(nodes.map((node) => [node.id, 0]));
+      relationships.forEach((relationship) => {
+        degreeMap.set(relationship.fromId, (degreeMap.get(relationship.fromId) || 0) + 1);
+        degreeMap.set(relationship.toId, (degreeMap.get(relationship.toId) || 0) + 1);
+      });
+
+      const centerNode = [...nodes].sort((left, right) => {
+        const scoreDiff = (degreeMap.get(right.id) || 0) - (degreeMap.get(left.id) || 0);
+        if (scoreDiff !== 0) return scoreDiff;
+        return String(left.name || "").localeCompare(String(right.name || ""));
+      })[0];
+
+      const positions = seedC4ComponentPositions(nodes, relationships, degreeMap, sizes, centerNode);
+      relaxC4ComponentLayout(positions, nodes, relationships, sizes, degreeMap);
+
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      nodes.forEach((node) => {
+        const size = sizes.get(node.id);
+        const position = positions.get(node.id) || { x: 0, y: 0 };
+        minX = Math.min(minX, position.x - size.width / 2);
+        minY = Math.min(minY, position.y - size.height / 2);
+        maxX = Math.max(maxX, position.x + size.width / 2);
+        maxY = Math.max(maxY, position.y + size.height / 2);
+      });
+
+      const paddingX = 20;
+      const paddingY = 20;
+      const topLeftPositions = new Map();
+      nodes.forEach((node) => {
+        const size = sizes.get(node.id);
+        const position = positions.get(node.id) || { x: 0, y: 0 };
+        topLeftPositions.set(node.id, {
+          x: round2(position.x - size.width / 2 - minX + paddingX),
+          y: round2(position.y - size.height / 2 - minY + paddingY)
+        });
+      });
+
+      return {
+        positions: topLeftPositions,
+        width: round2(maxX - minX + paddingX * 2),
+        height: round2(maxY - minY + paddingY * 2)
+      };
+    }
+
+    function seedC4ComponentPositions(nodes, relationships, degreeMap, sizes, centerNode) {
+      const positions = new Map();
+      const adjacency = new Map(nodes.map((node) => [node.id, []]));
+      relationships.forEach((relationship) => {
+        adjacency.get(relationship.fromId)?.push(relationship.toId);
+        adjacency.get(relationship.toId)?.push(relationship.fromId);
+      });
+
+      const distances = new Map([[centerNode.id, 0]]);
+      const queue = [centerNode.id];
+      while (queue.length) {
+        const currentId = queue.shift();
+        const nextDistance = (distances.get(currentId) || 0) + 1;
+        (adjacency.get(currentId) || []).forEach((nextId) => {
+          if (distances.has(nextId)) return;
+          distances.set(nextId, nextDistance);
+          queue.push(nextId);
+        });
+      }
+
+      const maxLabelLength = relationships.reduce((max, relationship) => {
+        return Math.max(max, String(relationship.label || "").length, String(relationship.technology || "").length);
+      }, 0);
+      const baseRadiusX = 250 + Math.min(190, maxLabelLength * 4);
+      const baseRadiusY = 180 + Math.min(120, maxLabelLength * 2.5);
+      positions.set(centerNode.id, { x: 0, y: 0 });
+
+      const layers = new Map();
+      nodes.forEach((node) => {
+        const distance = distances.get(node.id) || 0;
+        if (!layers.has(distance)) layers.set(distance, []);
+        layers.get(distance).push(node);
+      });
+
+      Array.from(layers.keys()).sort((a, b) => a - b).forEach((distance) => {
+        if (distance === 0) return;
+        const layerNodes = layers.get(distance)
+          .slice()
+          .sort((left, right) => (degreeMap.get(right.id) || 0) - (degreeMap.get(left.id) || 0) || String(left.name || "").localeCompare(String(right.name || "")));
+        const radiusX = baseRadiusX + (distance - 1) * 170;
+        const radiusY = baseRadiusY + (distance - 1) * 130;
+        const count = layerNodes.length;
+        layerNodes.forEach((node, index) => {
+          const angle = -Math.PI / 2 + index * (Math.PI * 2 / Math.max(1, count));
+          const size = sizes.get(node.id);
+          positions.set(node.id, {
+            x: round2(Math.cos(angle) * radiusX),
+            y: round2(Math.sin(angle) * radiusY + (size.height / 2 - 48))
+          });
+        });
+      });
+
+      return positions;
+    }
+
+    function relaxC4ComponentLayout(positions, nodes, relationships, sizes, degreeMap) {
+      const pairCounts = new Map();
+      relationships.forEach((relationship) => {
+        const key = [relationship.fromId, relationship.toId].sort().join("::");
+        pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+      });
+
+      for (let iteration = 0; iteration < 140; iteration += 1) {
+        const forces = new Map(nodes.map((node) => [node.id, { x: 0, y: 0 }]));
+
+        for (let left = 0; left < nodes.length; left += 1) {
+          for (let right = left + 1; right < nodes.length; right += 1) {
+            const a = nodes[left];
+            const b = nodes[right];
+            const aPos = positions.get(a.id) || { x: 0, y: 0 };
+            const bPos = positions.get(b.id) || { x: 0, y: 0 };
+            const dx = bPos.x - aPos.x;
+            const dy = bPos.y - aPos.y;
+            const distance = Math.hypot(dx, dy) || 1;
+            const minGapX = (sizes.get(a.id).width + sizes.get(b.id).width) / 2 + 120;
+            const minGapY = (sizes.get(a.id).height + sizes.get(b.id).height) / 2 + 90;
+            const preferred = Math.hypot(minGapX, minGapY);
+            const repel = Math.min(11, (preferred * preferred) / (distance * distance)) * 1.7;
+            const extra = Math.abs(dx) < minGapX && Math.abs(dy) < minGapY ? 2.8 : 0;
+            const shift = normalizedShift(dx || 1, dy || 1, repel + extra);
+            forces.get(a.id).x -= shift.x;
+            forces.get(a.id).y -= shift.y;
+            forces.get(b.id).x += shift.x;
+            forces.get(b.id).y += shift.y;
+          }
+        }
+
+        relationships.forEach((relationship) => {
+          const from = positions.get(relationship.fromId);
+          const to = positions.get(relationship.toId);
+          if (!from || !to) return;
+          const dx = to.x - from.x;
+          const dy = to.y - from.y;
+          const distance = Math.hypot(dx, dy) || 1;
+          const desired = c4TargetEdgeLength(relationship, pairCounts, degreeMap);
+          const pull = (distance - desired) * 0.028;
+          const shift = normalizedShift(dx || 1, dy || 1, pull);
+          forces.get(relationship.fromId).x += shift.x;
+          forces.get(relationship.fromId).y += shift.y;
+          forces.get(relationship.toId).x -= shift.x;
+          forces.get(relationship.toId).y -= shift.y;
+        });
+
+        nodes.forEach((node) => {
+          const position = positions.get(node.id);
+          const force = forces.get(node.id);
+          const degree = degreeMap.get(node.id) || 0;
+          if (!position || !force) return;
+          position.x = round2((position.x + clamp(force.x, -24, 24)) * 0.988);
+          position.y = round2((position.y + clamp(force.y, -20, 20)) * (degree > 3 ? 0.992 : 0.986));
+        });
+      }
+    }
+
+    function c4TargetEdgeLength(relationship, pairCounts, degreeMap) {
+      const pairKey = [relationship.fromId, relationship.toId].sort().join("::");
+      const pairCount = pairCounts.get(pairKey) || 1;
+      const textPressure = Math.max(String(relationship.label || "").length, String(relationship.technology || "").length);
+      const nodePressure = Math.max(0, (degreeMap.get(relationship.fromId) || 0) + (degreeMap.get(relationship.toId) || 0) - 2);
+      return 260 + textPressure * 4.2 + (pairCount - 1) * 42 + nodePressure * 16;
+    }
+
+    function syncC4NumberingControls() {
+      if (c4NumberingEnabled) c4NumberingEnabled.checked = Boolean(state.c4.numbering?.enabled);
+      if (c4NumberingStart) {
+        c4NumberingStart.value = String(Math.max(1, Number(state.c4.numbering?.start) || 1));
+        c4NumberingStart.disabled = !Boolean(state.c4.numbering?.enabled);
+      }
+    }
+
+    function readC4NumberingControlsToState() {
+      state.c4.numbering = {
+        enabled: Boolean(c4NumberingEnabled?.checked),
+        start: Math.max(1, Number(c4NumberingStart?.value) || 1)
+      };
+      syncC4NumberingControls();
     }
 
     function syncC4TextFromModel() {
@@ -5717,6 +6213,7 @@
         "@startuml",
         "!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml",
         "LAYOUT_WITH_LEGEND()",
+        `' c4-numbering ${state.c4.numbering?.enabled ? "on " + Math.max(1, Number(state.c4.numbering?.start) || 1) : "off"}`,
         ""
       ];
 
@@ -5783,6 +6280,7 @@
       state.c4.nodes = parsed.nodes;
       state.c4.boundaries = parsed.boundaries;
       state.c4.relationships = parsed.relationships;
+      state.c4.numbering = parsed.numbering || { enabled: true, start: 1 };
       state.c4.selection = null;
       normalizeC4State();
       renderC4();
@@ -5792,6 +6290,7 @@
       const nodes = [];
       const boundaries = [];
       const relationships = [];
+      const numbering = { enabled: true, start: 1 };
       const aliasToNodeId = new Map();
       const aliasToBoundaryId = new Map();
       const boundaryStack = [];
@@ -5820,6 +6319,13 @@
         const line = rawLine.trim();
         if (!line || line === "@startuml" || line === "@enduml") return;
         if (line.startsWith("!include") || line.startsWith("LAYOUT_") || line.startsWith("title ")) return;
+
+        const numberingMatch = line.match(/^'\s*c4-numbering\s+(on|off)(?:\s+(\d+))?$/i);
+        if (numberingMatch) {
+          numbering.enabled = numberingMatch[1].toLowerCase() === "on";
+          numbering.start = Math.max(1, Number(numberingMatch[2]) || 1);
+          return;
+        }
 
         const nodePosMatch = line.match(/^'\s*pos\s+([A-Za-z_][\w.-]*)\s+(-?\d+)\s+(-?\d+)$/i);
         if (nodePosMatch) {
@@ -5931,7 +6437,7 @@
         }
       });
 
-      return { nodes, boundaries, relationships };
+      return { nodes, boundaries, relationships, numbering };
     }
 
     function splitC4Args(value) {
@@ -6005,6 +6511,10 @@
     function normalizeC4State() {
       const localNodes = state.c4.nodes;
       const localBoundaries = state.c4.boundaries;
+      state.c4.numbering = {
+        enabled: Boolean(state.c4.numbering?.enabled),
+        start: Math.max(1, Number(state.c4.numbering?.start) || 1)
+      };
 
       localBoundaries.forEach((boundary, index) => {
         boundary.kind = C4_BOUNDARY_TYPES.includes(boundary.kind) ? boundary.kind : "system";
