@@ -114,6 +114,64 @@
 
     .toolbar {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border: 1px solid #334155;
+      border-radius: 9px;
+      background: #0b1326;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    .toolbar-field span {
+      white-space: nowrap;
+    }
+
+    .toolbar-field select {
+      min-width: 180px;
+      border: 1px solid #334155;
+      border-radius: 7px;
+      background: #111827;
+      color: #f8fafc;
+      padding: 6px 8px;
+    }
+
+    .toolbar-btn-secondary {
+      background: #0b1326;
+      color: #cbd5e1;
+    }
+
+    .toolbar-btn-secondary:hover {
+      background: #172033;
+      color: #f8fafc;
+    }
+
+    .workspace-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #fff7ed;
+      border-bottom: 1px solid #fed7aa;
+      color: #9a3412;
+    }
+
+    .workspace-banner strong {
+      color: #7c2d12;
+    }
+
+    .workspace-banner-actions {
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
@@ -847,12 +905,25 @@
       </div>
     </div>
     <div class="toolbar">
+      <label class="toolbar-field" for="template-select">
+        <span>Starter</span>
+        <select id="template-select"></select>
+      </label>
+      <button id="btn-apply-template" class="toolbar-btn-secondary" type="button">Use Template</button>
       <button id="btn-new">New</button>
+      <button id="btn-save-source" class="toolbar-btn-secondary" type="button">Save PUML</button>
       <button id="btn-export-svg">Export SVG</button>
       <button id="btn-export-png">Export PNG</button>
       <button id="btn-export-jpeg">Export JPEG</button>
     </div>
   </header>
+
+  <section id="workspace-banner" class="workspace-banner" hidden>
+    <div id="workspace-banner-text"><strong>Draft ready.</strong> Local changes were recovered.</div>
+    <div class="workspace-banner-actions">
+      <button id="btn-clear-draft" class="toolbar-btn-secondary" type="button">Discard Draft</button>
+    </div>
+  </section>
 
   <main id="main-layout">
     <section class="panel tools">
@@ -1286,6 +1357,88 @@
     const GIT_CONFIG_KEY = "sequence-diagram-editor-git-config-v1";
     const AI_CONFIG_KEY = "sequence-diagram-editor-ai-config-v1";
     const AI_OAUTH_SESSION_KEY = "sequence-diagram-editor-ai-oauth-session-v1";
+    const WORKSPACE_DRAFT_KEY = "sequence-diagram-editor-workspace-draft-v1";
+    const WORKSPACE_UI_KEY = "sequence-diagram-editor-workspace-ui-v1";
+    const STARTER_TEMPLATES = [
+      {
+        id: "starter-basic",
+        name: "Basic Request",
+        description: "A simple user, UI, and API flow for quick edits.",
+        model: {
+          participants: [
+            { id: "p1", name: "User", alias: null, type: "actor" },
+            { id: "p2", name: "UI", alias: null, type: "boundary" },
+            { id: "p3", name: "API", alias: null, type: "control" }
+          ],
+          messages: [
+            { id: "m1", fromId: "p1", toId: "p2", label: "click submit", type: "sync", color: "#0f172a", dotted: false },
+            { id: "m2", fromId: "p2", toId: "p3", label: "validate", type: "sync", color: "#0f172a", dotted: false },
+            { id: "m3", fromId: "p3", toId: "p2", label: "ok", type: "return", color: "#0f172a", dotted: false }
+          ],
+          notes: [
+            { id: "n1", targetId: "p2", text: "Client-side checks", position: "right", offsetY: 0, anchorIndex: 2 }
+          ],
+          fragments: [
+            { id: "f1", kind: "loop", label: "for each item", startIndex: 0, endIndex: 1 }
+          ],
+          autoNumber: { enabled: false, start: 1 }
+        }
+      },
+      {
+        id: "starter-login",
+        name: "Login Handshake",
+        description: "A guarded sign-in flow with validation and failure handling.",
+        model: {
+          participants: [
+            { id: "p1", name: "Customer", alias: null, type: "actor" },
+            { id: "p2", name: "Web App", alias: null, type: "boundary" },
+            { id: "p3", name: "Identity API", alias: null, type: "control" },
+            { id: "p4", name: "Session Store", alias: null, type: "database" }
+          ],
+          messages: [
+            { id: "m1", fromId: "p1", toId: "p2", label: "enter credentials", type: "sync", color: "#0f172a", dotted: false },
+            { id: "m2", fromId: "p2", toId: "p3", label: "validate credentials", type: "sync", color: "#0f172a", dotted: false },
+            { id: "m3", fromId: "p3", toId: "p4", label: "create session", type: "create", color: "#0f172a", dotted: false },
+            { id: "m4", fromId: "p4", toId: "p3", label: "session token", type: "return", color: "#0f172a", dotted: false },
+            { id: "m5", fromId: "p3", toId: "p2", label: "authenticated", type: "return", color: "#0f172a", dotted: false }
+          ],
+          notes: [
+            { id: "n1", targetId: "p2", text: "Show inline validation before submit", position: "right", offsetY: 0, anchorIndex: 0 }
+          ],
+          fragments: [
+            { id: "f1", kind: "alt", label: "credentials valid", startIndex: 1, endIndex: 4 }
+          ],
+          autoNumber: { enabled: true, start: 1 }
+        }
+      },
+      {
+        id: "starter-async",
+        name: "Async Job",
+        description: "A background processing pattern with polling and completion note.",
+        model: {
+          participants: [
+            { id: "p1", name: "User", alias: null, type: "actor" },
+            { id: "p2", name: "Portal", alias: null, type: "boundary" },
+            { id: "p3", name: "Job API", alias: null, type: "control" },
+            { id: "p4", name: "Worker", alias: null, type: "control" }
+          ],
+          messages: [
+            { id: "m1", fromId: "p1", toId: "p2", label: "start export", type: "sync", color: "#0f172a", dotted: false },
+            { id: "m2", fromId: "p2", toId: "p3", label: "queue export job", type: "async", color: "#0f172a", dotted: false },
+            { id: "m3", fromId: "p3", toId: "p4", label: "process payload", type: "async", color: "#0f172a", dotted: false },
+            { id: "m4", fromId: "p2", toId: "p3", label: "poll status", type: "sync", color: "#0f172a", dotted: false },
+            { id: "m5", fromId: "p3", toId: "p2", label: "complete", type: "return", color: "#0f172a", dotted: false }
+          ],
+          notes: [
+            { id: "n1", targetId: "p2", text: "Keep the user on the same page", position: "left", offsetY: 48, anchorIndex: 3 }
+          ],
+          fragments: [
+            { id: "f1", kind: "loop", label: "until job completes", startIndex: 3, endIndex: 4 }
+          ],
+          autoNumber: { enabled: true, start: 10 }
+        }
+      }
+    ];
 
     const state = {
       participants: [],
@@ -1334,7 +1487,12 @@
         start: 1
       },
       aiImage: null,
-      aiDiagnostics: []
+      aiDiagnostics: [],
+      workspace: {
+        selectedTemplateId: STARTER_TEMPLATES[0].id,
+        draftSavedAt: "",
+        bannerMode: "idle"
+      }
     };
 
     const layout = {
@@ -1355,6 +1513,12 @@
     const tabBtnEditor = document.getElementById("tab-btn-editor");
     const tabBtnAi = document.getElementById("tab-btn-ai");
     const tabBtnC4 = document.getElementById("tab-btn-c4");
+    const templateSelect = document.getElementById("template-select");
+    const workspaceBanner = document.getElementById("workspace-banner");
+    const workspaceBannerText = document.getElementById("workspace-banner-text");
+    const btnApplyTemplate = document.getElementById("btn-apply-template");
+    const btnClearDraft = document.getElementById("btn-clear-draft");
+    const btnSaveSource = document.getElementById("btn-save-source");
     const splitLeft = document.getElementById("split-left");
     const splitRight = document.getElementById("split-right");
     const splitHorizontal = document.getElementById("split-horizontal");
@@ -1489,7 +1653,9 @@
     const c4PropHeight = document.getElementById("c4-prop-height");
 
     function init() {
-      resetDiagram();
+      hydrateWorkspaceUiState();
+      populateTemplateOptions();
+      resetDiagram({ skipAutosave: true });
       resetC4();
       bindTabs();
       bindToolbar();
@@ -1505,32 +1671,21 @@
       bindContextMenu();
       bindLayoutControls();
       bindGlobalDrag();
+      bindWorkspaceShortcuts();
       syncAiImageUi();
       renderAiDiagnostics();
       applyPreviewScaleUi();
+      syncTemplateUi();
+      syncWorkspaceBanner();
+      applyWorkspaceLayoutState();
       switchTab(state.activeTab);
+      restoreWorkspaceDraft();
       render();
       renderC4();
     }
 
-    function resetDiagram() {
-      state.participants = [
-        { id: "p1", name: "User", alias: null, type: "actor" },
-        { id: "p2", name: "UI", alias: null, type: "boundary" },
-        { id: "p3", name: "API", alias: null, type: "control" }
-      ];
-      state.messages = [
-        { id: "m1", fromId: "p1", toId: "p2", label: "click submit", type: "sync", color: "#0f172a", dotted: false },
-        { id: "m2", fromId: "p2", toId: "p3", label: "validate", type: "sync", color: "#0f172a", dotted: false },
-        { id: "m3", fromId: "p3", toId: "p2", label: "ok", type: "return", color: "#0f172a", dotted: false }
-      ];
-      state.notes = [
-        { id: "n1", targetId: "p2", text: "Client-side checks", position: "right", offsetY: 0, anchorIndex: 2 }
-      ];
-      state.fragments = [
-        { id: "f1", kind: "loop", label: "for each item", startIndex: 0, endIndex: 1 }
-      ];
-      state.autoNumber = { enabled: false, start: 1 };
+    function resetDiagram(options = {}) {
+      applyTemplateSnapshot(state.workspace.selectedTemplateId, { skipAutosave: true });
       state.selection = null;
       state.drag = null;
       state.layoutDrag = null;
@@ -1538,6 +1693,7 @@
       closeContextMenu();
       syncSequenceNumberingControls();
       syncTextFromModel();
+      if (!options.skipAutosave) persistWorkspaceDraft("template");
     }
 
     function resetC4() {
@@ -1558,6 +1714,201 @@
       state.c4.selection = null;
       state.c4.drag = null;
       syncC4TextFromModel();
+    }
+
+    function hydrateWorkspaceUiState() {
+      try {
+        const raw = localStorage.getItem(WORKSPACE_UI_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return;
+        state.previewScale = clamp(Number(parsed.previewScale) || 1, 0.5, 2);
+        state.activeTab = ["editor", "ai", "c4"].includes(parsed.activeTab) ? parsed.activeTab : "editor";
+        state.workspace.selectedTemplateId = getStarterTemplate(parsed.selectedTemplateId).id;
+        state.workspace.bannerMode = "idle";
+      } catch (_error) {
+        // ignore malformed local data
+      }
+    }
+
+    function applyWorkspaceLayoutState() {
+      const safeLeft = clamp(parseFloat(localStorage.getItem(WORKSPACE_UI_KEY + ":left")) || 280, 210, 520);
+      const safeRight = clamp(parseFloat(localStorage.getItem(WORKSPACE_UI_KEY + ":right")) || 340, 250, 620);
+      const topPct = clamp(parseFloat(localStorage.getItem(WORKSPACE_UI_KEY + ":top")) || 62, 35, 82);
+      mainLayout.style.setProperty("--left-panel-width", Math.round(safeLeft) + "px");
+      mainLayout.style.setProperty("--right-panel-width", Math.round(safeRight) + "px");
+      mainLayout.style.setProperty("--top-row-height", topPct.toFixed(1) + "%");
+    }
+
+    function persistWorkspaceUiState() {
+      const ui = {
+        previewScale: state.previewScale,
+        activeTab: state.activeTab,
+        selectedTemplateId: state.workspace.selectedTemplateId
+      };
+      try {
+        localStorage.setItem(WORKSPACE_UI_KEY, JSON.stringify(ui));
+        localStorage.setItem(WORKSPACE_UI_KEY + ":left", String(parseFloat(getComputedStyle(mainLayout).getPropertyValue("--left-panel-width")) || 280));
+        localStorage.setItem(WORKSPACE_UI_KEY + ":right", String(parseFloat(getComputedStyle(mainLayout).getPropertyValue("--right-panel-width")) || 340));
+        localStorage.setItem(WORKSPACE_UI_KEY + ":top", String(parseFloat(getComputedStyle(mainLayout).getPropertyValue("--top-row-height")) || 62));
+      } catch (_error) {
+        // ignore local storage failures
+      }
+    }
+
+    function persistWorkspaceDraft(reason) {
+      if (state.activeTab !== "editor") return;
+      const snapshot = exportModelSnapshot();
+      const payload = {
+        savedAt: new Date().toISOString(),
+        reason: reason || "render",
+        templateId: state.workspace.selectedTemplateId,
+        text: textArea.value || serializePlantUml(),
+        model: snapshot
+      };
+      try {
+        localStorage.setItem(WORKSPACE_DRAFT_KEY, JSON.stringify(payload));
+        state.workspace.draftSavedAt = payload.savedAt;
+      } catch (_error) {
+        // ignore local storage failures
+      }
+    }
+
+    function restoreWorkspaceDraft() {
+      try {
+        const raw = localStorage.getItem(WORKSPACE_DRAFT_KEY);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || !parsed.model) return false;
+        state.workspace.selectedTemplateId = getStarterTemplate(parsed.templateId).id;
+        const draftText = String(parsed.text || "");
+        if (draftText.trim()) {
+          try {
+            const reparsed = parsePlantUml(draftText);
+            applyModelSnapshot({
+              participants: reparsed.participants,
+              messages: reparsed.messages,
+              notes: reparsed.notes,
+              fragments: reparsed.fragments,
+              autoNumber: reparsed.autoNumber || { enabled: false, start: 1 }
+            });
+          } catch (_error) {
+            applyModelSnapshot(parsed.model);
+          }
+        } else {
+          applyModelSnapshot(parsed.model);
+        }
+        textArea.value = draftText || serializePlantUml();
+        state.workspace.draftSavedAt = String(parsed.savedAt || "");
+        state.workspace.bannerMode = "restored";
+        syncTemplateUi();
+        syncWorkspaceBanner();
+        return true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function clearWorkspaceDraft() {
+      try {
+        localStorage.removeItem(WORKSPACE_DRAFT_KEY);
+      } catch (_error) {
+        // ignore local storage failures
+      }
+      state.workspace.draftSavedAt = "";
+      state.workspace.bannerMode = "idle";
+      syncWorkspaceBanner();
+    }
+
+    function syncWorkspaceBanner() {
+      if (!workspaceBanner || !workspaceBannerText) return;
+      const mode = state.workspace.bannerMode;
+      if (mode === "restored" && state.workspace.draftSavedAt) {
+        workspaceBanner.hidden = false;
+        workspaceBannerText.innerHTML = "<strong>Draft restored.</strong> Recovered your last local edit from " + formatWorkspaceTime(state.workspace.draftSavedAt) + ".";
+        return;
+      }
+      if (mode === "template") {
+        const template = getStarterTemplate(state.workspace.selectedTemplateId);
+        workspaceBanner.hidden = false;
+        workspaceBannerText.innerHTML = "<strong>Template loaded.</strong> " + esc(template.name) + " is ready to edit.";
+        return;
+      }
+      workspaceBanner.hidden = true;
+    }
+
+    function formatWorkspaceTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "a recent session";
+      return date.toLocaleString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        month: "short",
+        day: "numeric"
+      });
+    }
+
+    function confirmTemplateApply() {
+      return window.confirm("Replace the current diagram with the selected starter template?");
+    }
+
+    function bindWorkspaceShortcuts() {
+      if (btnClearDraft) {
+        btnClearDraft.addEventListener("click", () => {
+          clearWorkspaceDraft();
+          resetDiagram();
+          render();
+        });
+      }
+      window.addEventListener("keydown", (event) => {
+        const modifier = event.metaKey || event.ctrlKey;
+        const target = event.target;
+        const inTextField = target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.tagName === "SELECT" || target.isContentEditable);
+
+        if (modifier && event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          if (state.activeTab === "editor") savePlantUmlSource();
+          return;
+        }
+
+        if (modifier && event.key.toLowerCase() === "n") {
+          event.preventDefault();
+          if (state.activeTab === "editor") {
+            clearWorkspaceDraft();
+            resetDiagram();
+            render();
+          } else if (state.activeTab === "c4") {
+            resetC4();
+            renderC4();
+          }
+          return;
+        }
+
+        if (modifier && event.key === "Enter" && state.activeTab === "editor") {
+          event.preventDefault();
+          applyPlantUmlText(textArea.value);
+          return;
+        }
+
+        if (!modifier && !inTextField && (event.key === "Delete" || event.key === "Backspace")) {
+          if (state.activeTab === "editor" && state.selection && deleteSelection(state.selection)) {
+            event.preventDefault();
+            render();
+          }
+        }
+      });
+    }
+
+    function savePlantUmlSource() {
+      const source = state.activeTab === "c4"
+        ? (c4SourceText.value || serializeC4PlantUml())
+        : (textArea.value || serializePlantUml());
+      downloadBlob(source, activeDiagramFileName("puml"), "text/plain;charset=utf-8");
+      if (state.activeTab === "c4") {
+        c4Status.textContent = "Saved PlantUML source.";
+      } else {
+        statusEl.textContent = "Saved PlantUML source.";
+      }
     }
 
     function bindTabs() {
@@ -1583,6 +1934,7 @@
       tabBtnC4.setAttribute("aria-selected", isC4 ? "true" : "false");
       closeContextMenu();
       removeInlineEditor();
+      persistWorkspaceUiState();
       if (isEditor) render();
       if (isC4) renderC4();
     }
@@ -2941,6 +3293,8 @@
       normalizeDiagramState();
       state.selection = null;
       syncSequenceNumberingControls();
+      state.workspace.bannerMode = "idle";
+      syncWorkspaceBanner();
       textArea.value = plantUmlText;
       render();
     }
@@ -2952,9 +3306,29 @@
           renderC4();
           return;
         }
+        clearWorkspaceDraft();
         resetDiagram();
         render();
       });
+      if (btnApplyTemplate) {
+        btnApplyTemplate.addEventListener("click", () => {
+          if (state.activeTab !== "editor") switchTab("editor");
+          const templateId = templateSelect?.value || state.workspace.selectedTemplateId;
+          if (!templateId) return;
+          if (!confirmTemplateApply()) return;
+          state.workspace.selectedTemplateId = templateId;
+          clearWorkspaceDraft();
+          resetDiagram();
+          state.workspace.bannerMode = "template";
+          syncWorkspaceBanner();
+          render();
+        });
+      }
+      if (btnSaveSource) {
+        btnSaveSource.addEventListener("click", () => {
+          savePlantUmlSource();
+        });
+      }
       document.getElementById("btn-export-svg").addEventListener("click", () => {
         downloadBlob(buildActiveSvg({ forExport: true }), activeDiagramFileName("svg"), "image/svg+xml");
       });
@@ -3073,6 +3447,9 @@
       });
       textArea.addEventListener("click", selectFromTextCaret);
       textArea.addEventListener("keyup", selectFromTextCaret);
+      textArea.addEventListener("input", () => {
+        persistWorkspaceDraft("typing");
+      });
     }
 
     function bindC4Controls() {
@@ -3702,6 +4079,7 @@
         previewScale.addEventListener("input", () => {
           state.previewScale = clamp(Number(previewScale.value) / 100, 0.5, 2);
           applyPreviewScaleUi();
+          persistWorkspaceUiState();
           render();
         });
       }
@@ -3774,6 +4152,7 @@
         if (state.layoutDrag) {
           applyLayoutDrag(event.clientX, event.clientY);
           state.layoutDrag = null;
+          persistWorkspaceUiState();
           statusEl.textContent = "Rendered";
           return;
         }
@@ -3831,6 +4210,48 @@
       const pct = Math.round(state.previewScale * 100);
       if (previewScale) previewScale.value = String(pct);
       if (previewScaleLabel) previewScaleLabel.textContent = pct + "%";
+    }
+
+    function populateTemplateOptions() {
+      if (!templateSelect) return;
+      templateSelect.innerHTML = "";
+      STARTER_TEMPLATES.forEach((template) => {
+        const option = document.createElement("option");
+        option.value = template.id;
+        option.textContent = template.name;
+        templateSelect.appendChild(option);
+      });
+      templateSelect.addEventListener("change", () => {
+        state.workspace.selectedTemplateId = templateSelect.value || STARTER_TEMPLATES[0].id;
+        persistWorkspaceUiState();
+        syncWorkspaceBanner();
+      });
+    }
+
+    function syncTemplateUi() {
+      if (!templateSelect) return;
+      templateSelect.value = state.workspace.selectedTemplateId || STARTER_TEMPLATES[0].id;
+      const current = getStarterTemplate(state.workspace.selectedTemplateId);
+      if (current) templateSelect.title = current.description;
+    }
+
+    function getStarterTemplate(templateId) {
+      return STARTER_TEMPLATES.find((entry) => entry.id === templateId) || STARTER_TEMPLATES[0];
+    }
+
+    function cloneTemplateModel(templateId) {
+      const template = getStarterTemplate(templateId);
+      return JSON.parse(JSON.stringify(template.model));
+    }
+
+    function applyTemplateSnapshot(templateId, options = {}) {
+      const model = cloneTemplateModel(templateId);
+      state.workspace.selectedTemplateId = getStarterTemplate(templateId).id;
+      applyModelSnapshot(model);
+      state.selection = null;
+      state.drag = null;
+      syncTemplateUi();
+      if (!options.skipAutosave) persistWorkspaceDraft("template");
     }
 
     function addParticipant(type) {
@@ -3912,6 +4333,8 @@
       renderItems();
       renderProps();
       syncTextFromModel();
+      persistWorkspaceDraft("render");
+      persistWorkspaceUiState();
       statusEl.textContent = "Rendered";
     }
 
