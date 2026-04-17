@@ -528,6 +528,12 @@
       white-space: nowrap;
     }
 
+    .status.error {
+      color: #9f1239;
+      background: #fff1f2;
+      border-color: #fecdd3;
+    }
+
     .canvas-wrap {
       flex: 1;
       border: 1px dashed #c6d5e9;
@@ -704,6 +710,66 @@
       margin-top: 8px;
       display: flex;
       gap: 8px;
+    }
+
+    .editor-diagnostics {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fbfdff;
+      min-height: 72px;
+      max-height: 210px;
+      overflow: auto;
+      padding: 8px;
+    }
+
+    .editor-diagnostics-empty {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .editor-diagnostic-entry {
+      width: 100%;
+      border: 1px solid #dbe3ee;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 8px;
+      display: grid;
+      gap: 4px;
+      text-align: left;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+
+    .editor-diagnostic-entry:last-child {
+      margin-bottom: 0;
+    }
+
+    .editor-diagnostic-entry.warning {
+      border-color: #fed7aa;
+      background: #fff7ed;
+    }
+
+    .editor-diagnostic-entry.error {
+      border-color: #fecdd3;
+      background: #fff1f2;
+    }
+
+    .editor-diagnostic-entry:hover {
+      background: #f8fbff;
+    }
+
+    .editor-diagnostic-meta {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .editor-diagnostic-message {
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     .svg-item.selected {
@@ -910,11 +976,11 @@
         <select id="template-select"></select>
       </label>
       <button id="btn-apply-template" class="toolbar-btn-secondary" type="button">Use Template</button>
-      <button id="btn-new">New</button>
-      <button id="btn-save-source" class="toolbar-btn-secondary" type="button">Save PUML</button>
-      <button id="btn-export-svg">Export SVG</button>
-      <button id="btn-export-png">Export PNG</button>
-      <button id="btn-export-jpeg">Export JPEG</button>
+      <button id="btn-new" title="Cmd/Ctrl+N">New</button>
+      <button id="btn-save-source" class="toolbar-btn-secondary" type="button" title="Cmd/Ctrl+S">Save PUML</button>
+      <button id="btn-export-svg" title="Cmd/Ctrl+Shift+S">Export SVG</button>
+      <button id="btn-export-png" title="Cmd/Ctrl+Shift+P">Export PNG</button>
+      <button id="btn-export-jpeg" title="Cmd/Ctrl+Shift+J">Export JPEG</button>
     </div>
   </header>
 
@@ -1109,8 +1175,13 @@
       <textarea id="uml-text"></textarea>
       <div class="text-actions">
         <button id="btn-format-source">Format Source</button>
-        <button id="btn-apply-text">Apply Text</button>
+        <button id="btn-apply-text" title="Cmd/Ctrl+Enter">Apply Text</button>
         <button id="btn-sync-text">Sync From Diagram</button>
+      </div>
+      <div class="hint">Shortcuts: Cmd/Ctrl+N for new, Cmd/Ctrl+S to save, Cmd/Ctrl+Enter to apply, Cmd/Ctrl+Shift+S/P/J to export, Alt+1/2/3 to switch tabs.</div>
+      <div id="editor-diagnostics" class="editor-diagnostics">
+        <div id="editor-diagnostics-empty" class="editor-diagnostics-empty">Source diagnostics appear here after apply.</div>
+        <div id="editor-diagnostics-log"></div>
       </div>
     </section>
   </main>
@@ -1348,6 +1419,7 @@
     <button id="ctx-delete-item" type="button" class="danger-btn">Delete Item</button>
   </div>
 
+  <script src="app-logic.js"></script>
   <script>
     const PARTICIPANT_TYPES = ["actor", "boundary", "control", "entity", "database"];
     const MESSAGE_TYPES = ["sync", "async", "return", "create", "destroy"];
@@ -1359,6 +1431,7 @@
     const AI_OAUTH_SESSION_KEY = "sequence-diagram-editor-ai-oauth-session-v1";
     const WORKSPACE_DRAFT_KEY = "sequence-diagram-editor-workspace-draft-v1";
     const WORKSPACE_UI_KEY = "sequence-diagram-editor-workspace-ui-v1";
+    const WORKSPACE_STORAGE_KEY = "sequence-diagram-editor-workspace-v1";
     const STARTER_TEMPLATES = [
       {
         id: "starter-basic",
@@ -1439,6 +1512,7 @@
         }
       }
     ];
+    const appLogic = window.InturnAppLogic || {};
 
     const state = {
       participants: [],
@@ -1486,6 +1560,7 @@
         enabled: false,
         start: 1
       },
+      editorDiagnostics: [],
       aiImage: null,
       aiDiagnostics: [],
       workspace: {
@@ -1527,6 +1602,9 @@
     const btnBuildC4FromSequence = document.getElementById("btn-build-c4-from-sequence");
     const seqAutonumberEnabled = document.getElementById("seq-autonumber-enabled");
     const seqAutonumberStart = document.getElementById("seq-autonumber-start");
+    const editorDiagnostics = document.getElementById("editor-diagnostics");
+    const editorDiagnosticsEmpty = document.getElementById("editor-diagnostics-empty");
+    const editorDiagnosticsLog = document.getElementById("editor-diagnostics-log");
 
     const propsForm = document.getElementById("props-form");
     const propsEmpty = document.getElementById("props-empty");
@@ -1669,6 +1747,7 @@
       loadAiConfig();
       tryCompleteAiOauthRedirect();
       bindContextMenu();
+      bindKeyboardShortcuts();
       bindLayoutControls();
       bindGlobalDrag();
       bindWorkspaceShortcuts();
@@ -1678,6 +1757,8 @@
       syncTemplateUi();
       syncWorkspaceBanner();
       applyWorkspaceLayoutState();
+      restoreWorkspaceState();
+      applyPreviewScaleUi();
       switchTab(state.activeTab);
       restoreWorkspaceDraft();
       render();
@@ -1690,6 +1771,7 @@
       state.drag = null;
       state.layoutDrag = null;
       state.contextMenu = { open: false, targetKind: null, targetId: null };
+      state.editorDiagnostics = [];
       closeContextMenu();
       syncSequenceNumberingControls();
       syncTextFromModel();
@@ -1871,25 +1953,6 @@
           return;
         }
 
-        if (modifier && event.key.toLowerCase() === "n") {
-          event.preventDefault();
-          if (state.activeTab === "editor") {
-            clearWorkspaceDraft();
-            resetDiagram();
-            render();
-          } else if (state.activeTab === "c4") {
-            resetC4();
-            renderC4();
-          }
-          return;
-        }
-
-        if (modifier && event.key === "Enter" && state.activeTab === "editor") {
-          event.preventDefault();
-          applyPlantUmlText(textArea.value);
-          return;
-        }
-
         if (!modifier && !inTextField && (event.key === "Delete" || event.key === "Backspace")) {
           if (state.activeTab === "editor" && state.selection && deleteSelection(state.selection)) {
             event.preventDefault();
@@ -1937,6 +2000,7 @@
       persistWorkspaceUiState();
       if (isEditor) render();
       if (isC4) renderC4();
+      saveWorkspaceState();
     }
 
     function bindAiControls() {
@@ -3284,6 +3348,17 @@
     }
 
     function applyPlantUmlText(plantUmlText) {
+      const analysis = appLogic.analyzePlantUmlText
+        ? appLogic.analyzePlantUmlText(plantUmlText)
+        : { diagnostics: [], errors: [], warnings: [] };
+      setEditorDiagnostics(analysis.diagnostics || []);
+      if (analysis.errors && analysis.errors.length) {
+        textArea.value = plantUmlText;
+        statusEl.textContent = "Source not applied";
+        statusEl.classList.add("error");
+        return false;
+      }
+
       const parsed = parsePlantUml(plantUmlText);
       state.participants = parsed.participants;
       state.messages = parsed.messages;
@@ -3297,6 +3372,10 @@
       syncWorkspaceBanner();
       textArea.value = plantUmlText;
       render();
+      if (analysis.warnings && analysis.warnings.length) {
+        statusEl.textContent = "Rendered with warnings";
+      }
+      return true;
     }
 
     function bindToolbar() {
@@ -3422,6 +3501,67 @@
 
       window.addEventListener("keydown", (event) => {
         if (event.key === "Escape") closeContextMenu();
+      });
+    }
+
+    function bindKeyboardShortcuts() {
+      window.addEventListener("keydown", (event) => {
+        const action = appLogic.resolveShortcutAction
+          ? appLogic.resolveShortcutAction(event, { activeTab: state.activeTab })
+          : null;
+        if (!action) return;
+
+        event.preventDefault();
+
+        if (action === "new") {
+          if (state.activeTab === "c4") {
+            resetC4();
+            renderC4();
+          } else {
+            resetDiagram();
+            render();
+          }
+          return;
+        }
+
+        if (action === "apply-sequence") {
+          if (state.activeTab === "editor") applyPlantUmlText(textArea.value);
+          return;
+        }
+
+        if (action === "apply-c4") {
+          if (state.activeTab === "c4") applyC4Text(c4SourceText.value);
+          return;
+        }
+
+        if (action === "export-svg") {
+          downloadBlob(buildActiveSvg({ forExport: true }), activeDiagramFileName("svg"), "image/svg+xml");
+          return;
+        }
+
+        if (action === "export-png") {
+          exportPng();
+          return;
+        }
+
+        if (action === "export-jpeg") {
+          exportJpeg();
+          return;
+        }
+
+        if (action === "switch-editor") {
+          switchTab("editor");
+          return;
+        }
+
+        if (action === "switch-ai") {
+          switchTab("ai");
+          return;
+        }
+
+        if (action === "switch-c4") {
+          switchTab("c4");
+        }
       });
     }
 
@@ -4081,6 +4221,7 @@
           applyPreviewScaleUi();
           persistWorkspaceUiState();
           render();
+          saveWorkspaceState();
         });
       }
 
@@ -4154,6 +4295,7 @@
           state.layoutDrag = null;
           persistWorkspaceUiState();
           statusEl.textContent = "Rendered";
+          saveWorkspaceState();
           return;
         }
         if (state.c4.drag) {
@@ -4204,6 +4346,52 @@
       const numeric = Number(value);
       if (Number.isFinite(numeric)) return numeric;
       return layoutHeight * 0.62;
+    }
+
+    function saveWorkspaceState() {
+      try {
+        const layoutHeight = Math.max(620, mainLayout.getBoundingClientRect().height || window.innerHeight || 620);
+        const snapshot = {
+          version: 1,
+          activeTab: state.activeTab,
+          previewScale: state.previewScale,
+          leftPanelWidth: parseFloat(getComputedStyle(mainLayout).getPropertyValue("--left-panel-width")) || 280,
+          rightPanelWidth: parseFloat(getComputedStyle(mainLayout).getPropertyValue("--right-panel-width")) || 340,
+          topRowHeight: parseTopRowPixels(getComputedStyle(mainLayout).getPropertyValue("--top-row-height").trim(), layoutHeight),
+          sequenceSource: textArea.value || serializePlantUml(),
+          c4Source: c4SourceText.value || serializeC4Diagram()
+        };
+        localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(snapshot));
+      } catch (_error) {
+        // Ignore persistence failures so the editor remains usable in locked-down browsers.
+      }
+    }
+
+    function restoreWorkspaceState() {
+      try {
+        const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+        if (!raw) return;
+        const snapshot = appLogic.sanitizeWorkspaceSnapshot ? appLogic.sanitizeWorkspaceSnapshot(raw) : null;
+        if (!snapshot) return;
+
+        state.previewScale = snapshot.previewScale;
+        state.activeTab = snapshot.activeTab;
+        mainLayout.style.setProperty("--left-panel-width", Math.round(snapshot.leftPanelWidth) + "px");
+        mainLayout.style.setProperty("--right-panel-width", Math.round(snapshot.rightPanelWidth) + "px");
+
+        const layoutHeight = Math.max(620, mainLayout.getBoundingClientRect().height || window.innerHeight || 620);
+        const topPercent = clamp((snapshot.topRowHeight / layoutHeight) * 100, 35, 82);
+        mainLayout.style.setProperty("--top-row-height", topPercent.toFixed(1) + "%");
+
+        if (snapshot.sequenceSource) {
+          applyPlantUmlText(snapshot.sequenceSource);
+        }
+        if (snapshot.c4Source) {
+          applyC4Text(snapshot.c4Source);
+        }
+      } catch (_error) {
+        // Ignore corrupted snapshots and keep the default demo workspace.
+      }
     }
 
     function applyPreviewScaleUi() {
@@ -4336,6 +4524,50 @@
       persistWorkspaceDraft("render");
       persistWorkspaceUiState();
       statusEl.textContent = "Rendered";
+      statusEl.classList.remove("error");
+      saveWorkspaceState();
+    }
+
+    function setEditorDiagnostics(diagnostics) {
+      state.editorDiagnostics = Array.isArray(diagnostics) ? diagnostics.slice() : [];
+      renderEditorDiagnostics();
+    }
+
+    function renderEditorDiagnostics() {
+      const diagnostics = Array.isArray(state.editorDiagnostics) ? state.editorDiagnostics : [];
+      editorDiagnosticsEmpty.hidden = diagnostics.length > 0;
+      editorDiagnosticsLog.innerHTML = "";
+
+      diagnostics.forEach((entry) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "editor-diagnostic-entry " + (entry.severity || "warning");
+
+        const meta = document.createElement("div");
+        meta.className = "editor-diagnostic-meta";
+        meta.textContent = String(entry.severity || "warning") + " • line " + String(entry.line || 1);
+
+        const message = document.createElement("div");
+        message.className = "editor-diagnostic-message";
+        message.textContent = entry.message || "Unknown diagnostic";
+
+        button.appendChild(meta);
+        button.appendChild(message);
+        button.addEventListener("click", () => jumpToEditorLine(entry.line || 1));
+        editorDiagnosticsLog.appendChild(button);
+      });
+    }
+
+    function jumpToEditorLine(lineNumber) {
+      const lines = textArea.value.split("\n");
+      const safeLine = clamp(Number(lineNumber) || 1, 1, Math.max(1, lines.length));
+      let start = 0;
+      for (let index = 0; index < safeLine - 1; index += 1) {
+        start += lines[index].length + 1;
+      }
+      const end = start + (lines[safeLine - 1] || "").length;
+      textArea.focus();
+      textArea.setSelectionRange(start, end);
     }
 
     function buildSvg(options = {}) {
@@ -4954,6 +5186,7 @@
 
     function syncTextFromModel() {
       textArea.value = serializePlantUml();
+      setEditorDiagnostics([]);
     }
 
     function syncSequenceNumberingControls() {
@@ -5484,6 +5717,7 @@
       renderC4Props();
       syncC4TextFromModel();
       c4Status.textContent = "Rendered";
+      saveWorkspaceState();
     }
 
     function buildC4Svg(options = {}) {
@@ -6710,47 +6944,14 @@
     }
 
     function parseParticipantDeclarationLine(line) {
-      const match = line.match(/^(participant|actor|boundary|control|entity|database)\s+(.+)$/i);
-      if (!match) return null;
-
-      const keyword = match[1].toLowerCase();
-      const rest = match[2].trim();
-      const declMatch = rest.match(/^("[^"]+"|[\w.-]+)(?:\s+as\s+("[^"]+"|[\w .-]+))?$/i);
-      if (!declMatch) return null;
-
-      const firstRaw = String(declMatch[1] || "").trim();
-      const secondRaw = String(declMatch[2] || "").trim();
-      const firstValue = unquotePlantToken(firstRaw);
-      const secondValue = unquotePlantToken(secondRaw);
-      if (!firstValue) return null;
-
-      const firstQuoted = isQuotedPlantToken(firstRaw);
-      const secondQuoted = isQuotedPlantToken(secondRaw);
-      let displayName = firstValue;
-      let alias = null;
-
-      if (secondRaw) {
-        if (firstQuoted && !secondQuoted) {
-          displayName = firstValue;
-          alias = secondValue;
-        } else if (!firstQuoted && secondQuoted) {
-          displayName = secondValue;
-          alias = firstValue;
-        } else {
-          displayName = firstValue;
-          alias = secondValue;
-        }
+      if (appLogic.parseParticipantDeclarationLine) {
+        return appLogic.parseParticipantDeclarationLine(line);
       }
-
-      return {
-        type: keyword === "participant" ? "entity" : keyword,
-        alias,
-        displayName,
-        referenceName: alias || displayName
-      };
+      return null;
     }
 
     function unquotePlantToken(value) {
+      if (appLogic.unquotePlantToken) return appLogic.unquotePlantToken(value);
       const text = String(value || "").trim();
       if (!text) return "";
       if (text.startsWith("\"") && text.endsWith("\"")) {
@@ -6772,36 +6973,17 @@
     }
 
     function parseMessageLine(line) {
-      const text = String(line || "").trim();
-      if (!text) return null;
-
-      const arrowMatch = text.match(/--x|-->|->>|->/);
-      if (!arrowMatch || arrowMatch.index == null) return null;
-
-      const arrow = arrowMatch[0];
-      const fromRaw = text.slice(0, arrowMatch.index).trim();
-      const remainder = text.slice(arrowMatch.index + arrow.length).trim();
-      if (!fromRaw || !remainder) return null;
-
-      const colonIndex = remainder.indexOf(":");
-      const toRaw = (colonIndex >= 0 ? remainder.slice(0, colonIndex) : remainder).trim();
-      const label = colonIndex >= 0 ? remainder.slice(colonIndex + 1).trim() : "";
-      if (!toRaw) return null;
-
-      return {
-        from: unquotePlantToken(fromRaw),
-        arrow,
-        to: unquotePlantToken(toRaw),
-        label
-      };
+      if (appLogic.parseMessageLine) {
+        return appLogic.parseMessageLine(line);
+      }
+      return null;
     }
 
     function parseNoteTargetName(rawTarget) {
-      const text = String(rawTarget || "").trim();
-      if (!text) return "";
-      const noLeadingOf = text.replace(/^of\s+/i, "").trim();
-      const firstTarget = noLeadingOf.split(",")[0].trim();
-      return unquotePlantToken(firstTarget);
+      if (appLogic.parseNoteTargetName) {
+        return appLogic.parseNoteTargetName(rawTarget);
+      }
+      return "";
     }
 
     function kindFromId(id) {
