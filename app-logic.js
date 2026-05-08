@@ -5,7 +5,7 @@
   }
   global.InturnAppLogic = exported;
 })(typeof window !== "undefined" ? window : globalThis, function () {
-  const FRAGMENT_KEYWORDS = new Set(["loop", "alt", "opt", "par"]);
+  const FRAGMENT_KEYWORDS = new Set(["loop", "alt", "opt", "par", "group"]);
 
   function unquotePlantToken(value) {
     const text = String(value || "").trim();
@@ -104,6 +104,7 @@
     const diagnostics = [];
     const declaredParticipants = new Set();
     const fragmentStack = [];
+    let openNote = null;
     let hasStart = false;
     let hasEnd = false;
 
@@ -124,6 +125,11 @@
       }
 
       if (line.startsWith("'") || line.startsWith("!") || line.toLowerCase().startsWith("title ")) {
+        return;
+      }
+
+      if (openNote) {
+        if (/^end\s*note$/i.test(line) || /^endnote$/i.test(line)) openNote = null;
         return;
       }
 
@@ -166,8 +172,28 @@
         if (targetName && !declaredParticipants.has(targetName)) {
           pushDiagnostic(diagnostics, "warning", lineNumber, 'Note target "' + targetName + '" is not declared explicitly.');
         }
+        return;
+      }
+
+      const blockNoteMatch = line.match(/^note\s+(left|right|over)(?:\s+of)?\s+(.+?)$/i);
+      if (blockNoteMatch) {
+        const targetName = parseNoteTargetName(blockNoteMatch[2]);
+        if (targetName && !declaredParticipants.has(targetName)) {
+          pushDiagnostic(diagnostics, "warning", lineNumber, 'Note target "' + targetName + '" is not declared explicitly.');
+        }
+        openNote = { line: lineNumber };
+        return;
+      }
+
+      const floatingBlockNoteMatch = line.match(/^note\s+(left|right)\s*$/i);
+      if (floatingBlockNoteMatch) {
+        openNote = { line: lineNumber };
       }
     });
+
+    if (openNote) {
+      pushDiagnostic(diagnostics, "error", openNote.line, "Note is missing a matching end note.");
+    }
 
     if (!hasStart) {
       pushDiagnostic(diagnostics, "warning", 1, "PlantUML source is missing @startuml.");

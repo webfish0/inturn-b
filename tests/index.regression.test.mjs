@@ -192,6 +192,7 @@ globalThis.__elements = {
 };`;
 
   vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(new URL("../app-logic.js", import.meta.url), "utf8"), sandbox, { filename: "app-logic.js" });
   vm.runInContext(exportSource, sandbox, { filename: "index.html" });
   return { app: sandbox.__app, elements: sandbox.__elements, storage, sandbox };
 }
@@ -207,6 +208,47 @@ test("starter template selection applies the chosen model", () => {
   assert.equal(app.state.autoNumber.enabled, true);
   assert.equal(app.state.autoNumber.start, 10);
   assert.equal(app.state.fragments[0].kind, "loop");
+});
+
+test("parses AI-style multi-line notes and group fragments", () => {
+  const { app } = loadApp();
+  const parsed = app.parsePlantUml(`
+@startuml
+participant User
+participant API
+group retry flow
+User -> API: Submit request
+note right of API
+  Validate the payload
+  Return a detailed error
+end note
+end
+@enduml
+  `);
+
+  assert.equal(parsed.fragments.length, 1);
+  assert.equal(parsed.fragments[0].kind, "group");
+  assert.equal(parsed.notes.length, 1);
+  assert.equal(parsed.notes[0].targetId, "p2");
+  assert.equal(parsed.notes[0].text, "Validate the payload\nReturn a detailed error");
+});
+
+test("serializes multi-line notes as PlantUML note blocks", () => {
+  const { app } = loadApp();
+  app.applyPlantUmlText(`
+@startuml
+participant User
+participant API
+User -> API: Submit request
+note right of API
+  Validate the payload
+  Return a detailed error
+end note
+@enduml
+  `);
+
+  const serialized = app.serializePlantUml();
+  assert.match(serialized, /note right of API\n  Validate the payload\n  Return a detailed error\nend note/);
 });
 
 test("workspace draft persistence restores recovered text and banner state", () => {

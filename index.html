@@ -34,6 +34,7 @@
       font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
       background: radial-gradient(circle at top right, #e6f0ff 0%, var(--bg) 42%);
+      overflow-x: hidden;
     }
 
     button, input, select, textarea {
@@ -247,6 +248,7 @@
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
       min-height: 0;
+      min-width: 0;
       padding: 10px;
       display: flex;
       flex-direction: column;
@@ -411,6 +413,7 @@
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
       min-height: 0;
+      min-width: 0;
       padding: 10px;
     }
 
@@ -493,7 +496,7 @@
 
     .tool-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));
       gap: 6px;
     }
 
@@ -709,6 +712,7 @@
     .text-actions {
       margin-top: 8px;
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
@@ -913,6 +917,12 @@
     }
 
     @media (max-width: 1180px) {
+      header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+
       .header-left {
         width: 100%;
         flex-wrap: wrap;
@@ -924,6 +934,23 @@
 
       .tab-btn {
         flex: 1;
+      }
+
+      .toolbar {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      }
+
+      .toolbar-field {
+        grid-column: 1 / -1;
+        justify-content: space-between;
+        min-width: 0;
+      }
+
+      .toolbar-field select {
+        min-width: 0;
+        width: 100%;
       }
 
       main {
@@ -956,6 +983,58 @@
 
       .c4-stack {
         grid-template-rows: minmax(280px, auto) auto;
+      }
+    }
+
+    @media (max-width: 700px) {
+      header {
+        padding: 10px;
+      }
+
+      .header-left {
+        gap: 10px;
+      }
+
+      .title {
+        width: 100%;
+      }
+
+      .tab-bar {
+        border-radius: 12px;
+        align-items: stretch;
+      }
+
+      .tab-btn {
+        padding: 7px 8px;
+        white-space: normal;
+      }
+
+      .toolbar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .toolbar button {
+        min-height: 38px;
+        white-space: normal;
+      }
+
+      .workspace-banner {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      main,
+      .ai-workbench,
+      .c4-workbench {
+        padding: 8px;
+      }
+
+      .tool-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .preview-head {
+        align-items: flex-start;
       }
     }
   </style>
@@ -1024,6 +1103,7 @@
         <button class="tool-btn" data-add-fragment="alt">Alt</button>
         <button class="tool-btn" data-add-fragment="opt">Opt</button>
         <button class="tool-btn" data-add-fragment="par">Par</button>
+        <button class="tool-btn" data-add-fragment="group">Group</button>
       </div>
 
       <h3>Cross Diagram</h3>
@@ -1435,7 +1515,7 @@
   <script>
     const PARTICIPANT_TYPES = ["actor", "boundary", "control", "entity", "database"];
     const MESSAGE_TYPES = ["sync", "async", "return", "create", "destroy"];
-    const FRAGMENT_TYPES = ["loop", "alt", "opt", "par"];
+    const FRAGMENT_TYPES = ["loop", "alt", "opt", "par", "group"];
     const C4_NODE_TYPES = ["person", "system", "container", "database"];
     const C4_BOUNDARY_TYPES = ["system", "container", "enterprise", "boundary"];
     const GIT_CONFIG_KEY = "sequence-diagram-editor-git-config-v1";
@@ -1590,7 +1670,7 @@
       spacing: 180,
       xStart: 90,
       yStart: 110,
-      msgStep: 76
+      msgStep: 128
     };
 
     const previewCanvas = document.getElementById("preview-canvas");
@@ -2839,7 +2919,7 @@
         "Output requirements:",
         "- Return PlantUML only, no markdown fences, no explanation.",
         "- Start with @startuml and end with @enduml.",
-        "- Use participants, messages, notes, and logic blocks (loop/alt/opt/par) when appropriate.",
+        "- Use participants, messages, notes, and logic blocks (loop/alt/opt/par/group) when appropriate.",
         "- Keep labels concise and technically accurate.",
         "- If an image is provided, use visible labels, arrows, UI states, or whiteboard structure as supporting evidence.",
         imageInstruction,
@@ -4608,7 +4688,8 @@
       const width = Math.max(680, state.participants.length * spacing + 160);
       const maxNoteOffset = state.notes.reduce((max, note, index) => Math.max(max, normalizedNoteOffset(note, index)), 0);
       const rows = Math.max(3, state.messages.length + Math.ceil(maxNoteOffset / 58) + 3);
-      const height = Math.max(420, layout.yStart + rows * layout.msgStep + 60);
+      const noteBottom = state.notes.reduce((max, note) => Math.max(max, noteY(note) + noteBox(note).height / 2), 0);
+      const height = Math.max(420, layout.yStart + rows * layout.msgStep + 60, noteBottom + 60);
       const displayWidth = Math.round(width * scale);
       const displayHeight = Math.round(height * scale);
       const lifelineEnd = height - 50;
@@ -4671,11 +4752,14 @@
         if (targetIndex < 0) return;
         const baseX = participantX(targetIndex);
         const y = noteY(note);
-        const x = note.position === "left" ? baseX - 160 : note.position === "right" ? baseX + 20 : baseX - 70;
+        const box = noteBox(note);
+        const desiredX = note.position === "left" ? baseX - box.width - 20 : note.position === "right" ? baseX + 20 : baseX - box.width / 2;
+        const x = clamp(desiredX, 10, Math.max(10, width - box.width - 10));
+        const textY = y - box.height / 2 + 20;
         groups.push(
           `<g class="svg-item" data-id="${note.id}" data-kind="note">` +
-          `<rect class="drag-handle" data-id="${note.id}" data-kind="note" x="${x}" y="${y - 26}" width="140" height="50" rx="7" fill="#fff7ed" stroke="#ea580c" />` +
-          `<text class="editable" data-id="${note.id}" data-kind="note" data-field="text" x="${x + 10}" y="${y}" font-size="12" fill="#9a3412">${esc(note.text)}</text>` +
+          `<rect class="drag-handle" data-id="${note.id}" data-kind="note" x="${x}" y="${y - box.height / 2}" width="${box.width}" height="${box.height}" rx="7" fill="#fff7ed" stroke="#ea580c" />` +
+          `<text class="editable" data-id="${note.id}" data-kind="note" data-field="text" x="${x + 10}" y="${textY}" font-size="12" fill="#9a3412">${noteTextTspans(note, x + 10, textY)}</text>` +
           `</g>`
         );
       });
@@ -4684,6 +4768,53 @@
         ${svgDefs()}
         ${groups.join("")}
       </svg>`;
+    }
+
+    function noteTextLines(note) {
+      const sourceLines = String(note?.text || "").split(/\r?\n/);
+      const lines = sourceLines.flatMap((line) => wrapNoteTextLine(line, 44));
+      return lines.length ? lines : [""];
+    }
+
+    function wrapNoteTextLine(line, maxChars) {
+      const text = String(line || "");
+      if (text.length <= maxChars) return [text];
+      const words = text.split(/\s+/);
+      const lines = [];
+      let current = "";
+      words.forEach((word) => {
+        if (!word) return;
+        if (!current) {
+          current = word;
+        } else if ((current + " " + word).length <= maxChars) {
+          current += " " + word;
+        } else {
+          lines.push(current);
+          current = word;
+        }
+        while (current.length > maxChars) {
+          lines.push(current.slice(0, maxChars));
+          current = current.slice(maxChars);
+        }
+      });
+      if (current || !lines.length) lines.push(current);
+      return lines;
+    }
+
+    function noteBox(note) {
+      const lines = noteTextLines(note);
+      const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
+      return {
+        width: clamp(longest * 7 + 24, 140, 360),
+        height: Math.max(50, lines.length * 15 + 20)
+      };
+    }
+
+    function noteTextTspans(note, x, y) {
+      return noteTextLines(note).map((line, index) => {
+        if (index === 0) return `<tspan x="${x}" y="${y}">${esc(line || " ")}</tspan>`;
+        return `<tspan x="${x}" dy="15">${esc(line || " ")}</tspan>`;
+      }).join("");
     }
 
     function svgDefs() {
@@ -5090,7 +5221,8 @@
         if (!note) return;
         const participantIndex = clamp(Math.round((point.x - layout.xStart) / layout.spacing), 0, state.participants.length - 1);
         note.targetId = state.participants[participantIndex].id;
-        note.offsetY = clamp(Math.round(point.y - noteAnchorBaseY(note)), -220, 2200);
+        const noteIndex = state.notes.indexOf(note);
+        note.offsetY = clamp(Math.round(point.y - noteAnchorBaseY(note) - stackedNoteOffset(note, noteIndex)), -220, 2200);
         state.selection = { kind: "note", id: drag.id };
       } else if (drag.kind === "fragment") {
         const fragment = state.fragments.find((f) => f.id === drag.id);
@@ -5304,7 +5436,15 @@
           const noteHead = note.position === "over"
             ? `note over ${noteTarget}`
             : `note ${note.position} of ${noteTarget}`;
-          lines.push(`${noteHead}: ${note.text}`);
+          if (String(note.text || "").includes("\n")) {
+            lines.push(noteHead);
+            String(note.text || "").split(/\r?\n/).forEach((line) => {
+              lines.push(`  ${line}`);
+            });
+            lines.push("end note");
+          } else {
+            lines.push(`${noteHead}: ${note.text}`);
+          }
           if (Number.isFinite(Number(note.anchorIndex))) {
             lines.push(`  ' note-anchor ${Math.max(0, Math.round(Number(note.anchorIndex)))}`);
           }
@@ -5334,9 +5474,35 @@
       let f = 1;
       let lastMessage = null;
       let lastNote = null;
+      let pendingNote = null;
 
-      const lines = text.split("\n").map((line) => line.trim());
-      lines.forEach((line) => {
+      const pushPendingNote = () => {
+        if (!pendingNote) return;
+        const targetId = pendingNote.targetId || ensureParticipant(pendingNote.targetName, participants, names, () => "p" + p++);
+        notes.push({
+          id: "n" + n++,
+          targetId,
+          text: pendingNote.lines.join("\n"),
+          position: pendingNote.position,
+          offsetY: 0,
+          anchorIndex: pendingNote.anchorIndex
+        });
+        lastNote = notes[notes.length - 1];
+        lastMessage = null;
+        pendingNote = null;
+      };
+
+      const lines = text.split("\n");
+      lines.forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (pendingNote) {
+          if (/^end\s*note$/i.test(line) || /^endnote$/i.test(line)) {
+            pushPendingNote();
+          } else {
+            pendingNote.lines.push(rawLine.replace(/^\s*/, "").trimEnd());
+          }
+          return;
+        }
         if (!line || line === "@startuml" || line === "@enduml" || line.startsWith("title ")) return;
 
         const styleMatch = line.match(/^'\s*style\s+(.*)$/i);
@@ -5402,7 +5568,7 @@
           return;
         }
 
-        const fragmentStartMatch = line.match(/^(loop|alt|opt|par)\b\s*(.*)$/i);
+        const fragmentStartMatch = line.match(/^(loop|alt|opt|par|group)\b\s*(.*)$/i);
         if (fragmentStartMatch) {
           const id = "f" + f++;
           const kind = fragmentStartMatch[1].toLowerCase();
@@ -5458,6 +5624,33 @@
           return;
         }
 
+        const blockNoteMatch = line.match(/^note\s+(left|right|over)(?:\s+of)?\s+(.+?)$/i);
+        if (blockNoteMatch) {
+          const targetName = parseNoteTargetName(blockNoteMatch[2]);
+          if (!targetName) return;
+          pendingNote = {
+            targetName,
+            lines: [],
+            position: blockNoteMatch[1].toLowerCase(),
+            anchorIndex: lastMessage ? Math.max(0, messages.length - 1) : null
+          };
+          return;
+        }
+
+        const floatingBlockNoteMatch = line.match(/^note\s+(left|right)\s*$/i);
+        if (floatingBlockNoteMatch) {
+          const fallbackTargetId = lastMessage?.toId || lastMessage?.fromId || participants[0]?.id || "";
+          if (!fallbackTargetId) return;
+          pendingNote = {
+            targetId: fallbackTargetId,
+            targetName: "",
+            lines: [],
+            position: floatingBlockNoteMatch[1].toLowerCase(),
+            anchorIndex: lastMessage ? Math.max(0, messages.length - 1) : null
+          };
+          return;
+        }
+
         const floatingNoteMatch = line.match(/^note\s+(left|right)\s*:\s*(.*)$/i);
         if (floatingNoteMatch) {
           const fallbackTargetId = lastMessage?.toId || lastMessage?.fromId || participants[0]?.id || "";
@@ -5474,6 +5667,8 @@
           lastMessage = null;
         }
       });
+
+      pushPendingNote();
 
       while (stack.length) {
         const open = stack.pop();
@@ -5511,7 +5706,7 @@
         if (item) return { kind: "participant", id: item.id };
       }
 
-      const fragmentMatch = line.match(/^(loop|alt|opt|par)\b\s*(.*)$/i);
+      const fragmentMatch = line.match(/^(loop|alt|opt|par|group)\b\s*(.*)$/i);
       if (fragmentMatch) {
         const kind = fragmentMatch[1].toLowerCase();
         const label = fragmentMatch[2] || "";
@@ -7513,19 +7708,38 @@
     }
 
     function noteY(note) {
-      return noteAnchorBaseY(note) + normalizedNoteOffset(note, state.notes.indexOf(note));
+      const index = state.notes.indexOf(note);
+      return noteAnchorBaseY(note) + normalizedNoteOffset(note, index) + stackedNoteOffset(note, index);
     }
 
     function noteBaseY() {
-      return layout.yStart + Math.max(1, state.messages.length) * layout.msgStep + 14;
+      return layout.yStart + Math.max(1, state.messages.length) * layout.msgStep + 34;
     }
 
     function noteAnchorBaseY(note) {
       if (Number.isFinite(Number(note?.anchorIndex)) && state.messages.length) {
         const anchor = clamp(Number(note.anchorIndex), 0, state.messages.length - 1);
-        return messageY(anchor);
+        return messageY(anchor) + 28 + noteBox(note).height / 2;
       }
       return noteBaseY();
+    }
+
+    function noteStackKey(note) {
+      const anchor = Number.isFinite(Number(note?.anchorIndex)) ? String(clamp(Number(note.anchorIndex), 0, Math.max(0, state.messages.length - 1))) : "tail";
+      return [anchor, note?.targetId || "", note?.position || "right"].join("|");
+    }
+
+    function stackedNoteOffset(note, index) {
+      if (index <= 0) return 0;
+      const key = noteStackKey(note);
+      let offset = 0;
+      for (let i = 0; i < index; i += 1) {
+        const other = state.notes[i];
+        if (noteStackKey(other) === key && normalizedNoteOffset(other, i) === normalizedNoteOffset(note, index)) {
+          offset += noteBox(other).height + 10;
+        }
+      }
+      return offset;
     }
 
     function nextNoteOffset() {
