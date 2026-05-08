@@ -19,6 +19,24 @@ User -> API: call
   assert.equal(result.errors[0].line, 4);
 });
 
+test("analyzePlantUmlText accepts group fragments and multi-line notes", () => {
+  const result = analyzePlantUmlText(`
+@startuml
+participant User
+participant API
+group retry flow
+User -> API: call
+note right of API
+  Captures generated context
+  across multiple lines
+end note
+end
+@enduml
+  `);
+
+  assert.equal(result.errors.length, 0);
+});
+
 test("analyzePlantUmlText warns about implicit participants", () => {
   const result = analyzePlantUmlText(`
 @startuml
